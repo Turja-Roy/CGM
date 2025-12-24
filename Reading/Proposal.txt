@@ -1,0 +1,2329 @@
+ILLUMINATING THE COSMIC FOG: THE CIRCUMGALACTIC MEDIUM AND THE
+INTERGALACTIC MEDIUM IN SIMULATIONS AND OBSERVATIONS
+
+by
+
+Antareep Gogoi
+
+APPROVED BY SUPERVISORY COMMITTEE:
+
+Dr. Lindsay J. King, Chair
+
+Dr. Michael H. Kesden
+
+Dr. Tae Sun Kim
+
+Dr. Roger F. Malina
+
+Dr. Aaron R. Smith
+
+Copyright © 2024
+Antareep Gogoi
+All rights reserved
+
+This proposal is dedicated to all the curious minds on the pale blue dot who hasn’t given up
+on finding the mysteries of the universe.
+
+ILLUMINATING THE COSMIC FOG: THE CIRCUMGALACTIC MEDIUM AND THE
+INTERGALACTIC MEDIUM IN SIMULATIONS AND OBSERVATIONS
+
+by
+
+ANTAREEP GOGOI, BS-MS,MS
+
+DISSERTATION
+Presented to the Faculty of
+The University of Texas at Dallas
+in Partial Fulfillment
+of the Requirements
+for the Degree of
+
+DOCTOR OF PHILOSOPHY IN
+PHYSICS
+
+THE UNIVERSITY OF TEXAS AT DALLAS
+November 2024
+
+ACKNOWLEDGMENTS
+This work was partially supported by the Space Telescope Science Institute (STScI) through
+the Hubble Space Telescope Grant (Award Number: HST-AR-17027.006-A). I am deeply
+grateful to Dr. Lindsay King for her invaluable mentorship and constant support throughout
+every phase of this project. I also thank Dr. Tae Sun Kim for her insightful guidance
+and contributions, particularly in the observational aspects of the study. I am grateful to
+Dr. Jamie Bolton for providing the Sherwood Simulation Data and the necessary spectra
+extraction tools. My thanks also go to Dr. Matteo Viel and Dr. Aaron Smith for their
+invaluable discussions and guidance in coding. I extend my gratitude to the Texas Advanced
+Computing Center (TACC) for providing ample computational resources, allowing me to
+run our codes efficiently on their supercomputers. Lastly, I thank our future emperor of
+the earth and the solar system cum supreme commander optimus prime AI overlord a.k.a.
+chatGPT for gracing me with their unparalleled wisdom and helping me in every aspect of
+this project.
+November 2024
+
+v
+
+ILLUMINATING THE COSMIC FOG: THE CIRCUMGALACTIC MEDIUM AND THE
+INTERGALACTIC MEDIUM IN SIMULATIONS AND OBSERVATIONS
+Antareep Gogoi, PhD Proposal
+The University of Texas at Dallas, 2024
+
+Supervising Professor: Dr. Lindsay J. King, Chair
+
+The circumgalactic medium (CGM) plays a pivotal role in the evolution of galaxies in the
+Universe. Being the interface between the intergalactic medium (IGM) and the galaxies
+themselves, the CGM acts as a reservoir for gas inflows and also as a sink for galactic outflows.
+This PhD project aims to investigate the physical, thermal and kinematical properties of the
+gas in the CGM, with an emphasis on understanding the temperature-density relationship
+of the gas and effect of galactic feedback processes in these regions. To achieve this, we
+employ two high-resolution cosmological hydrodynamical simulation suites: the Sherwood
+simulations and IllustrisTNG simulations. These simulations provide a range of models and
+feedback mechanisms to explore the influence of stellar and active galactic nuclei (AGN)
+feedback on the gas properties surrounding the galaxies.
+A significant component of this work involves comparing simulation outputs with observational data from quasar sightlines, focusing on the Lyman-alpha forest as a probe of diffuse
+hydrogen in the IGM and CGM. We leverage a variety of subgrid physics models, including
+those for stellar winds and AGN feedback, to test the accuracy and limitations of current
+feedback prescriptions in simulations. We are also interested in investigating how the CGM
+evolves with time at different redshifts and how these feedback processes effect its evolution. The insights gained from this study will contribute to our knowledge of the complex
+multi-phase CGM and their interaction with their host galaxies and the IGM.
+
+vi
+
+TABLE OF CONTENTS
+ACKNOWLEDGMENTS . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+v
+
+ABSTRACT . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+vi
+
+LIST OF FIGURES . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+ix
+
+LIST OF TABLES . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+xii
+
+CHAPTER 1 INTRODUCTION . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+1
+
+1.1
+
+A very brief history of the universe . . . . . . . . . . . . . . . . . . . . . . .
+
+1
+
+1.2
+
+The Intergalactic Medium . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+2
+
+1.2.1
+
+The Lyman α Forest . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+4
+
+1.3
+
+The Circumgalactic Medium . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+5
+
+1.4
+
+Temperature-Density Relationship of the IGM and CGM . . . . . . . . . . .
+
+7
+
+1.5
+
+Cosmological Simulations . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+8
+
+1.5.1
+
+Smoothed Particle Hydrodynamics . . . . . . . . . . . . . . . . . . .
+
+9
+
+1.5.2
+
+Particle-Mesh and Tree-Particle-Mesh Methods . . . . . . . . . . . .
+
+11
+
+1.5.3
+
+Subgrid Physics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+12
+
+1.6
+
+Research Questions and Objectives . . . . . . . . . . . . . . . . . . . . . . .
+
+15
+
+1.7
+
+Outline . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+15
+
+CHAPTER 2 METHODOLOGY . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+17
+
+2.1
+
+Observational Data . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+17
+
+2.2
+
+Line Profile Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+18
+
+2.2.1
+
+Optical Depth . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+18
+
+2.2.2
+
+Line Broadening . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+19
+
+2.2.3
+
+Voigt Profile . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+20
+
+2.2.4
+
+VPFIT: Voigt Profile Fitting for Absorption Line Analysis . . . . . .
+
+21
+
+Cosmological Simulations to be Analyzed during this PhD Thesis . . . . . .
+
+23
+
+2.3.1
+
+The Sherwood Simulations . . . . . . . . . . . . . . . . . . . . . . . .
+
+23
+
+2.3.2
+
+The IllustrisTNG Simulations . . . . . . . . . . . . . . . . . . . . . .
+
+26
+
+2.3
+
+2.4
+
+Simulation Data Analysis
+2.4.1
+
+. . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+29
+
+Mock Spectra from Simulation . . . . . . . . . . . . . . . . . . . . . .
+
+29
+
+vii
+
+2.4.2
+
+Individual Galaxy halos in Simulation . . . . . . . . . . . . . . . . . .
+
+30
+
+CHAPTER 3 PRELIMINARY RESULTS AND DISCUSSION . . . . . . . . . . . .
+
+31
+
+3.1
+
+Individual Halo Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+31
+
+3.1.1
+
+Gas Density . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+31
+
+3.1.2
+
+Temperature . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+33
+
+Statistical Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+34
+
+CHAPTER 4 TIMELINE AND FUTURE WORK . . . . . . . . . . . . . . . . . . .
+
+39
+
+3.2
+
+4.1
+
+Work to date and future work . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+39
+
+4.2
+
+Application of Machine Learning . . . . . . . . . . . . . . . . . . . . . . . .
+
+40
+
+4.3
+
+Additional Project: Cluster Mergers . . . . . . . . . . . . . . . . . . . . . . .
+
+40
+
+4.4
+
+Products during PhD . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+41
+
+4.5
+
+Timeline of anticipated milestones . . . . . . . . . . . . . . . . . . . . . . . .
+
+41
+
+REFERENCES . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+42
+
+viii
+
+LIST OF FIGURES
+1.1
+
+Chronology of the Universe. Credits: NASA/WMAP Science Team . . . . . . .
+
+2
+
+1.2
+
+A 2D-visualization of the cosmic web from the fiducial (wind+AGN) simulation
+boxes of the Sherwood simulation suite. The left panel shows the gas density and
+the right panel shows the temperature of the gas. . . . . . . . . . . . . . . . . .
+
+3
+
+A spectrum of the QSO J132029-052335 taken by the VLT/UVES spectrigraph.
+The spectrum is shifted into the rest frame of the source. The forest of Lyman
+α absorption lines can be seen to the left of the Ly-α emmission line of the QSO
+at its rest wavelength of 1216Å. . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+4
+
+An artist’s rendition of the complex structure of the CGM. Bottom panel shows
+the large scale features of the CGM: hot and metal rich outflows coming out of a
+spiral galaxy at the center while cold gas from the IGM is being accreted by the
+galaxy along the filaments. All these inflows and outflows mix in the CGM to
+give it a complex multi-phase structure. There is also a smaller satellite galaxy
+at the right bottom corner with adds to the complexity. The multi-phase and
+turbulent nature of the CGM is shown in different zoomed-in scales in the top
+two panels. Source: Faucher-Giguere and Oh (2023). . . . . . . . . . . . . . . .
+
+6
+
+Left: Distribution of gas particles in the T −ρ plane in a snapshot of IllustrisTNG
+Simulation. Right: Distribution of Lyα absorbing gas clouds in observation in
+the Column Density-Line Width plane (refer to section 2.2.4). A positive Tmin −ρ
+correlation is seen in both simulation and observations for the low density IGM.
+A negative correlation in higher density clouds in the CGM is expected from the
+simulations. However observations are inconclusive due to lack of data in the CGM.
+
+7
+
+Different snapshots of a cosmological simulation to show how the evolution of the
+large scale structure is captured in these simulations. Source: Andrey Kravtsov.
+
+9
+
+A visualization of a particle’s SPH convolution. A particle’s properties are
+smoothed out over a region instead of being localized at one point. Source:
+Wikipedia. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+10
+
+A 2-D schematic diagram of the Tree-PM method. To compute the force on the
+red particle on the top right corner, instead of separately calculating all the forces
+from the 23 particles, the particles are organized in the tree like on the right. The
+forces from the particles in the grids away from the particles are approximated
+by the center of mass of all the particles in the grid. Source: Link. . . . . . . . .
+
+12
+
+AGN feedback observed in a galaxy cluster MS0735. The blue color shows the hot
+Intracluster Medium (ICM) gas, and the red color shows the radio jets coming
+out of the supermassive black hole. . . . . . . . . . . . . . . . . . . . . . . . . .
+
+13
+
+1.3
+
+1.4
+
+1.5
+
+1.6
+1.7
+
+1.8
+
+1.9
+
+ix
+
+2.1
+
+A beam of light passing through a cylinder of absorbers. Photon gets absorbed
+as it hits an absorber. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+18
+
+2.2
+
+Visualization of uncertainty in ν from Heisenberg’s uncertainty principle. . . . .
+
+19
+
+2.3
+
+A visualization of the Voigt profile as a combination of a Lorentzian and Gaussian
+Profile. Credits: Demtröder (2008). . . . . . . . . . . . . . . . . . . . . . . . . .
+
+22
+
+Absorption lines in a spectra fitted using VPFIT. The magenta lines indicate
+individual profiles and the black line is the combined profile after adding all the
+individual absorption lines. The table on the right gives the best fit parameters
+of NHI and b values each absorption line in the figure. . . . . . . . . . . . . . . .
+
+23
+
+Projected gas density of a halo in four different feedback physics of Sherwood
+simulations. The mass of the halo at z=2.4 is ∼ 1011 M⊙ , and z=0.01 is ∼ 1012 M⊙ .
+The cyan circle represents the virial radius of the dark matter halo. We see that at
+higher redshifts, AGN feedback is not significantly changing the gas distribution
+but as we come to lower redshift, the stronger AGN feedback drives almost all of
+the gas out of the halo region. . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+32
+
+Gas density projection of a galaxy of mass 1012.38 M⊙ at z=0.1 (left) and z=2.4
+(right) in TNG100-1. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+32
+
+Left: Projected gas density map of a thin slice centered at the same halo in no
+feedback and wind+AGN simulation. Middle: Zoomed-in projection map of the
+gas density. Right: 2-D temperature map around the halo. . . . . . . . . . . . .
+
+33
+
+2.4
+
+3.1
+
+3.2
+3.3
+
+3.4
+
+Gas density map around the halo in fig. 3.3, in three different temperature bins.
+The white region implies there is no gas in that temperature bin inside that region. 34
+
+3.5
+
+Left: Distribution of gas particles in the temperature-density plane around the
+halo in upper panels of Fig. 3.1 in the Sherwood wind+AGN simulation at z=2.4.
+Middle: A 2-D projected temperature map of the halo. Right: A column density
+map of the neutral hydrogen in the halo. The negative T − ρ relationship can be
+clearly seen in all the plots where temperature is coldest at the densest regions.
+
+35
+
+An example mock Lyα spectrum extracted from a halo in Sherwood wind+AGN
+simulation at z=2.4. The yellow arrow in the upper panel shows the position and
+direction of the line of sight with respect to the halo. The LOS has an impact
+parameter of 0.75Rvir from the center of the halo. The absorption line is well
+saturated as expected from a dense gas cloud in the CGM. This is the same halo
+shown in Figs. 3.1 and 3.5. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+35
+
+Top: Raw spectrum of a random line of sight in wind+strongAGN at z=0.1.
+Middle: Comparison between the volume-weighted density (blue) and optical
+depth-weighted density (red).
+Bottom: Comparison between the volume-weighted temperature (blue) and optical depth-weighted temperature (red). . . . . . . . . . . . . . . . . . . . . . . .
+
+36
+
+3.6
+
+3.7
+
+x
+
+3.8
+
+3.9
+
+Distribution of 6000 absorbers in N-b plane (top) and T-ρ plane (bottom) at
+z=0.1 for no feedback (Left), wind+AGN (middle) and wind+strongAGN (Right)
+simulation runs. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+
+37
+
+Line width (b) vs column density distribution of 14000 Lyα absorbers from random LOSs at z=2.4 in the Sherwood No feedback (left) and wind+strongAGN
+(right) runs. The wind+strongAGN absorbers seem to have a significantly wider
+distribution along the b-axis which is expected from a hotter IGM. However, in
+the CGM region, number of absorbers is still very sparse. A similar analysis
+needed by targeting LOSs nearby galaxies to investigate this region further. . . .
+
+38
+
+xi
+
+LIST OF TABLES
+2.1
+
+Details of the QSO spectra data available to us. . . . . . . . . . . . . . . . . . .
+
+17
+
+2.2
+
+List of Simulations Analyzed from the Sherwood simulation suite . . . . . . . .
+
+25
+
+2.3
+
+The IllustrisTNG Simulation Suite . . . . . . . . . . . . . . . . . . . . . . . . .
+
+27
+
+xii
+
+CHAPTER 1
+INTRODUCTION
+1.1
+
+A very brief history of the universe
+
+According to the Big Bang theory, all visible matter in the universe originated from an
+extremely hot and dense plasma composed of primordial hydrogen and helium, formed within
+the first few minutes of the universe’s creation. By the time the universe was around 300,000
+years old, this ionized plasma had cooled as the universe expanded, allowing electrons to
+combine with hydrogen and helium nuclei. This process, known as “recombination”, released
+excess energy in the form of photons, which we observe today as the Cosmic Microwave
+Background (CMB) radiation. After the CMB was first detected (Penzias and Wilson, 1965),
+it provided crucial evidence that ruled out the possibility of the universe being composed
+entirely of visible matter (or baryons).
+Today, we understand that baryons account for less than 20% of the matter in the
+universe, with the remaining portion being dark matter (Hu and Dodelson, 2002). While
+the exact nature of dark matter remains one of the great unsolved mysteries of modern
+science, the most widely accepted theory is that it consists of cold, heavy, and collisionless
+particles that interact with baryonic matter only through gravity—a model known as Cold
+Dark Matter (CDM).
+The extremely small temperature fluctuations, on the order of 10−5 , detected in the
+otherwise uniform CMB, served as the seeds for dark matter to begin clustering. Dark matter,
+being unaffected by radiation, began to fall into these tiny gravitational potential wells,
+forming the first large-scale structures in the universe (Peebles, 1980). Baryonic matter, in
+turn, followed the gravitational pull of dark matter, accumulating in these regions of higher
+density. In the densest regions, the first stars ignited, marking the birth of the first galaxies.
+Over time, the intense radiation from these early stars and galaxies reionized the neutral
+gas in the universe, ending the “cosmic dark ages” and initiating the epoch of reionization
+(Rees, 1998).
+While galaxies and stars formed in the densest regions of the universe, a significant
+portion of the baryonic matter remained in diffuse, gaseous form, filling the vast spaces
+between galaxies. Most of these baryons are highly ionized, existing in the intergalactic
+medium (IGM) and the circumgalactic medium (CGM)—the latter being the tenuous gas
+that surrounds galaxies, acting as a bridge between the IGM and the galaxy itself. These
+ionized gases play a crucial role in the history of the universe as they regulate processes
+such as structure formation, star formation, galaxy evolution, and supermassive black hole
+accretion. Figure 1.1, summarizes everything discussed above.
+This PhD proposal focuses on investigating the thermal, chemical and kinematical properties of the CGM, espicially on its temperature, density, metallicity, and ionization state.
+By comparing results from cosmological simulations with observational data, we will assess
+the accuracy of current models in capturing the behavior of the CGM and IGM.
+1
+
+Figure 1.1 Chronology of the Universe. Credits: NASA/WMAP Science Team
+
+1.2
+
+The Intergalactic Medium
+
+The intergalactic medium (IGM) is the vast, sparsely populated space between galaxies. The
+objects in the IGM can be roughly thought of as unvirialized particles that are not bound
+by the gravitational pull of a galaxy’s dark matter halo including particles within small
+dark matter halos (< 109 M⊙ ) that are too small to host galaxies. The IGM constitutes a
+significant portion of the universe’s baryonic matter. Until redshift, z = 3, more than 90%
+of the baryons were in diffuse gas form in the IGM.
+The IGM’s structure follows the gravitational potential wells created by clustering dark
+matter (DM) as a result of primordial density fluctuations. Observed from large distances,
+the IGM resembles a complex web of interconnected structures, aptly named the “cosmic
+web”. Figure 1.2 shows a 2D visualization of the cosmic web from a simulation box used in
+this project. The structure consists of four main features: voids, filaments, sheets, and knots.
+The voids represent the least dense regions in the universe, often several tens to hundreds of
+Megaparsecs (Mpc) in size, with particle number densities as low as 10−7 cm−3 (for context,
+2
+
+this equates to the volume of approximately a hundred Earths to contain a mole of gas!). In
+contrast, clusters of galaxies form in the denser regions of filaments and knots. The IGM is
+connected to the clusters via huge sheets and filaments of gas, feeding the galaxies inside it
+with fresh gas essential for star formation.
+
+Figure 1.2 A 2D-visualization of the cosmic web from the fiducial (wind+AGN) simulation
+boxes of the Sherwood simulation suite. The left panel shows the gas density and the right
+panel shows the temperature of the gas.
+The temperature within the IGM also varies significantly across different regions. Away
+from the galaxy clusters, the gas is primarily heated up by the background ultra-violet(UV)
+radiation from luminous galaxies and quasars, maintaining temperatures close to photoionization equilibrium at around 104 K. But near the denser regions, where gas flows from voids
+into filaments, heating occurs due to collisions and turbulence, with temperatures reaching
+up to 105 to 107 K. The filaments themselves are connected to each other via knots, where
+the biggest clusters in the universe form. In these regions, it is possible for gas to be present
+at even higher temperatures of around 108 K.
+These diffuse gases in the IGM play a pivotal role in cosmic history, influencing structure
+formation, galaxy evolution, and star formation by acting as a vast cosmic reservoir that
+galaxies draw from for star formation. Understanding the IGM’s evolution sheds light on key
+cosmological phenomena, such as the epoch of reionization, large-scale structure formation,
+baryonic acoustic oscillations (BAOs), and the primordial abundances of elements.
+In the following sections, we will discuss the developments that form the modern understanding of the IGM. While there are several methods to probe the IGM, this chapter will
+focus on the Lyman-α forest, a primary tool for studying the IGM and especially relevant
+to this project.
+3
+
+1.2.1
+
+The Lyman α Forest
+
+The primary way to probe the gas in the IGM is to look at the absorption lines in the
+spectrum of a bright background source whose intrinsic spectrum is well-known. The most
+obvious absorption line to look for would be the Lyman-α (Lyα) line of the neutral hydrogen
+atom as it is the most abundant element in the universe. Due to the expansion of the universe,
+light gets redshifted as it travels through large distances. This implies that depending on the
+distance from a neutral hydrogen gas cloud to an observer, the wavelength at which the Lyα
+resonant line is observedbwill be different. The closer the gas is, the bluer this wavelength
+would be following the relation,
+z=
+
+λobs − λrest
+λrest
+
+(1.1)
+
+where z is redshift, λobs is observed wavelength of the absorption line and λrest = 1215.67Åis
+the rest wavelength of Lyα resonance.
+Soon after the first detection of distant quasi-stellar objects (QSOs) by Schmidt (1965), it
+was proposed that these Lyman-α absorption lines from intervening neutral hydrogen in the
+IGM should be observable in their spectra (Bahcall and Salpeter, 1965; Gunn and Peterson,
+1965). Although discrete absorption lines were indeed detected in QSO spectra, the exact
+origin of these lines remained controversial for several years, until higher-order lines in the
+Lyman series were also identified Baldwin (1977). The collection of these discrete “tree-like”
+absorption lines, located blueward of the Lyman-α emission line of the QSO, became known
+as the Lyman-α forest (Lynds, 1971; Sargent et al., 1980). Figure 1.3 shows an example of
+a quasar spectrum where the Lyα forest can be clearly seen blueward of the intrinstic Lyα
+emmision peak of the quasar itself.
+
+Figure 1.3 A spectrum of the QSO J132029-052335 taken by the VLT/UVES spectrigraph.
+The spectrum is shifted into the rest frame of the source. The forest of Lyman α absorption
+lines can be seen to the left of the Ly-α emmission line of the QSO at its rest wavelength of
+1216Å.
+A major leap in the study of the Lyman-α forest occurred with the introduction of the
+High-Resolution Echelle Spectrometer (HIRES) on the Keck telescope Vogt et al. (1994).
+4
+
+High-resolution QSO spectra obtained through HIRES (Hu et al., 1995; Kim et al., 1997)
+provided unprecedented detail, revealing that the Lyman-α forest traces highly photoionized,
+diffuse gas in the filaments, sheets, and halos of the cosmic web. These structures are
+consistent with our picture of structure formation resulting from gravitational collapse in
+a universe dominated by CDM, with an approximately uniform ionizing background (Cen
+et al., 1994; Hernquist et al., 1996).
+Studying these absorption lines gives us valuable information about the IGM. The strength
+of the line gives us the information about the amount of intervening gas the light has passed
+through. The width of an absorption line, in the other hand, is dictated by the Hubble flow
+across the gas cloud, thermal broadening and turbulence. The techniques for analyzing these
+absorption lines will be discussed in detail in Chapter 2.
+
+1.3
+
+The Circumgalactic Medium
+
+Observations have shown that all galaxies are surrounded by massive gaseous atmospheres.
+The first evidence for such an atmosphere came from observations of our own Milky Way
+galaxy. Guido Münch observed neutral sodium (Na I) and singly-ionized calcium (Ca II)
+absorption lines in the spectra of stars located above the Milky Way’s disk (Münch and
+Zirin, 1961). He presented these findings to Lyman Spitzer, noting that the absorption
+lines suggested a temperature of T ∼ 100 K and a particle density of n ∼ 10 cm−3 . Spitzer
+interpreted these observations as evidence of a much hotter (T ∼ 106 K) and more diffuse
+ambient medium surrounding the cooler gas clouds, which would be necessary to confine
+these clouds in a state of pressure equilibrium (Spitzer, 1956). This interpretation led to the
+conceptualization of the existence of a “Galactic corona.”
+In parallel with studies of the Lyα forest using QSO absorption lines, researchers observed
+that strong Lyα, CIV, and other metal absorption lines often originate in the extended halos
+of galaxies, suggesting the presence of a substantial gaseous medium near galaxies (Lanzetta
+et al., 1995; Chen et al., 2001). Today, this complex, multi-phase gaseous region around
+galaxies is known as the circumgalactic medium (CGM) (Steidel et al., 2010; Tumlinson
+et al., 2017). The CGM is a critical component of galaxy ecosystems, acting as a reservoir
+of gas that feeds galaxies while also receiving material ejected by stellar winds and active
+galactic nuclei (AGN). This dynamic interaction between galaxies and the CGM plays a
+pivotal role in shaping galaxy evolution by regulating star formation and redistributing
+heavy elements. As galaxies grow and evolve, they exchange gas with their surroundings,
+making the CGM an essential element in understanding galaxy formation and evolution.
+The study of the CGM has gained increasing attention due to its ability to bridge the
+gap between galaxies and the larger-scale structures of the IGM. Observationally, the CGM
+is mainly probed using quasar sightlines just like the IGM, with the distinction that the the
+intervening gas clouds in the CGM will produce Lyα along with other metal absorption lines
+depending on the temperature. These observations provide critical insights into the physical
+properties of the CGM, including its density, temperature, ionization state, and metallicity.
+5
+
+Figure 1.4 An artist’s rendition of the complex structure of the CGM. Bottom panel shows
+the large scale features of the CGM: hot and metal rich outflows coming out of a spiral
+galaxy at the center while cold gas from the IGM is being accreted by the galaxy along the
+filaments. All these inflows and outflows mix in the CGM to give it a complex multi-phase
+structure. There is also a smaller satellite galaxy at the right bottom corner with adds to
+the complexity. The multi-phase and turbulent nature of the CGM is shown in different
+zoomed-in scales in the top two panels. Source: Faucher-Giguere and Oh (2023).
+6
+
+However, understanding the CGM is challenging due to the complexity of its structure
+(Figure. 1.4) and the limitations of both observations and simulations. Theoretical models, particularly cosmological simulations and zoomed-in simulations of galaxies have been
+instrumental in advancing our understanding of the CGM. These simulations incorporate
+various physical processes, including gas cooling, star formation, and feedback mechanisms
+from stars and AGN, allowing researchers to study the evolution of galaxies and their gaseous
+environments in great detail.
+1.4
+
+Temperature-Density Relationship of the IGM and CGM
+
+There is currently no clear definition of the extent of the CGM, meaning the boundary
+at which the CGM ends and the IGM begins remains ambiguous. In theoretical studies,
+the CGM is often defined as the gas within one virial radius of a galaxy’s halo, whereas
+observationally, any gas with detectable metallicity is often attributed to the CGM. One of
+the key distinguishing characteristics between the IGM and CGM is their distribution in
+temperature-density phase space.
+
+Figure 1.5 Left: Distribution of gas particles in the T − ρ plane in a snapshot of IllustrisTNG
+Simulation. Right: Distribution of Lyα absorbing gas clouds in observation in the Column
+Density-Line Width plane (refer to section 2.2.4). A positive Tmin − ρ correlation is seen in
+both simulation and observations for the low density IGM. A negative correlation in higher
+density clouds in the CGM is expected from the simulations. However observations are
+inconclusive due to lack of data in the CGM.
+Figure 1.5 summarizes our understanding of the temperature-density relationship of the
+IGM and the CGM so far. To first order, the temperature in the IGM is tightly correlated
+with gas density, a relationship commonly known as “the positive IGM temperature–density
+(T–ρ) relation”, which follows a power law (Hui and Gnedin, 1997). This relation is governed
+by a combination of Hubble expansion and heating from the extragalactic UV background.
+7
+
+Denser gas clouds are hotter since they are less affected by the Hubble flow, resulting in
+a slower adiabatic cooling rate compared to lower-density gas. The slope of this power
+law is expected to increase over time, barring additional heating mechanisms such as He II
+reionization. In practice, this relation only defines a minimum temperature Tmin of the gas,
+as gas can be further heated by processes such as gravitational shock heating to temperatures
+well over 105 K (Cen and Ostriker, 1999). This positive (Tmin –ρ) correlation is well-supported
+by observations and has been extensively studied over the last few decades (Schaye et al.,
+2000; Rudie et al., 2012; Hiss et al., 2018).
+In contrast, gas in the CGM near galaxies can experience additional heating due to galactic feedback and gravitational infall. However, as it is denser and more metal-rich on average,
+CGM gas at 104 –105 K can cool radiatively. This results in a negative CGM Tmin –ρ relation,
+with a redshift-dependent turnover separating the IGM from the CGM. Cosmological simulations of the assembly of dark and baryonic matter have predicted the existence of such a
+relation for CGM gas (Davé et al., 2010; Peeples et al., 2010; Martizzi et al., 2019). However,
+observational evidence for this relation remains lacking due to limited data. Observing the
+CGM through QSO spectra requires sightlines that pass close to galaxies, which is relatively
+rare. Additionally, absorption lines in Lyman-α from the CGM are often saturated due to
+the higher gas density, making analysis of these lines challenging.
+Given these observational limitations, cosmological simulations play a critical role in
+exploring the complex physics of the CGM. We discuss this in the next section.
+1.5
+
+Cosmological Simulations
+
+Cosmological simulations are essential tools for studying the evolution of large-scale structures, such as galaxies, galaxy clusters, and the IGM. These simulations model the complex
+interplay of gravity, hydrodynamics, and feedback processes over billions of years in relatively
+shorter time steps. To capture these dynamics across vastly different scales and densities,
+cosmological simulations employ a range of computational techniques tailored to specific
+research objectives.
+The first cosmological simulations began by numerically solving a gravitational N-body
+system (Press and Schechter, 1974), where a set number of particles are placed on a grid with
+specified initial conditions, and their positions and momenta are updated at discrete time
+steps according to Newton’s laws. Since then, substantial work has been done to incorporate
+the effects of gas dynamics and star formation, leading to the development of hydrodynamical
+simulations that include both dark matter and baryonic matter. This integration allows for
+the modeling of not only gravitational interactions but also gas dynamics through methods
+like Smoothed Particle Hydrodynamics (SPH) and moving-mesh techniques, which capture
+the fluid behavior of gas in the large scale structure.
+Further advancements introduced subgrid models to represent small-scale processes that
+cannot be directly resolved, such as star formation, supernova feedback, and black hole accretion. These models add critical astrophysical realism by simulating the feedback mechanisms
+that regulate galaxy formation and evolution. Today’s simulations, combine these compu8
+
+Figure 1.6 Different snapshots of a cosmological simulation to show how the evolution of the
+large scale structure is captured in these simulations. Source: Andrey Kravtsov.
+tational techniques with high-resolution producing increasingly accurate representations of
+structure formation across cosmic time.
+To illustrate these concepts, Figure 1.6 shows examples of simulation boxes at different
+redshifts. These snapshots highlight how the large-scale structure of the universe evolves
+over time, with dense regions forming clusters and filaments against a backdrop of diffuse
+gas in cosmic voids.
+1.5.1
+
+Smoothed Particle Hydrodynamics
+
+One of the popular approaches for cosmological simulation is the smoothed particle hydrodynamics (SPH). SPH is a computational method used to simulate fluid dynamics, first
+introduced by Lucy (1977) and Gingold and Monaghan (1977). SPH has become a widely
+adopted approach in astrophysics, as well as fields like aerodynamics, oceanography, and
+volcanology, due to its flexibility in handling highly dynamic and complex systems.
+9
+
+Figure 1.7 A visualization of a particle’s SPH convolution. A particle’s properties are
+smoothed out over a region instead of being localized at one point. Source: Wikipedia.
+In SPH, a fluid is represented by discrete particles, each carrying physical properties such
+as mass, density, temperature, and velocity. Unlike mesh-based (Eulerian) methods, where
+fluid properties are evaluated at fixed grid points in space, SPH is a Lagrangian approach:
+particles move with the fluid flow. This allows SPH to adapt naturally to varying densities,
+which is particularly useful for cosmological simulations where densities vary by orders of
+magnitude between cosmic voids and galactic cores.
+The properties of each particle are “smeared out” over a finite spatial range through
+a kernel function W , which decreases monotonically with distance and vanishes beyond
+a certain range, typically twice the particle’s smoothing length hSPH (Figure. 1.7). This
+smoothing length varies based on local density, being smaller in dense regions and larger in
+low-density areas. The kernel is often chosen to be a cubic spline, though other forms, like
+Gaussian kernels, are also used.
+The value A(r) of any quantity A at a position r is computed by summing over contributions from neighboring particles:
+A(r) =
+
+X mj Aj
+j
+
+ρj
+
+W (|r − rj |, hSPH ),
+
+(1.2)
+
+where Aj , ρj , mj , and rj are the value, density, mass, and position of the j-th particle,
+respectively, and the sum is taken over the nearest Nnb neighbors. The choice of Nnb depends
+on the simulation, with values ranging from 30 to 100 particles commonly used.
+Particle motions are determined by solving the Euler equations, including gravitational
+and hydrodynamic forces. In SPH simulations that incorporate only dark matter, the only
+relevant force is gravity. However, simulations of the intergalactic and circumgalactic media
+10
+
+include both dark matter particles and gas particles, allowing for the modeling of pressure
+forces, shocks, and other hydrodynamic effects. In many SPH implementations, gravitational
+forces between particles are softened to avoid numerical singularities, with the force between
+particles i and j given by
+Gmi mj
+,
+(1.3)
+F = 2
+2
+rij + lsoft
+where lsoft is the gravitational softening length.
+SPH’s flexibility allows for the inclusion of various astrophysical processes, such as viscosity, star formation, chemical enrichment, and radiative transfer.
+1.5.2
+
+Particle-Mesh and Tree-Particle-Mesh Methods
+
+In cosmological simulations, accurately modeling gravitational interactions among a vast
+number of particles is essential, but also computationally challenging. Directly calculating
+2
+gravitational forces between all particle pairs scales as O(Npart
+), where Npart is the number
+of particles in the simulation. Such a scaling quickly becomes computationally infeasible
+for the large particle counts typical of cosmological simulations. To address this, hybrid
+methods like the Particle-Mesh (PM) and Tree-PM techniques are commonly used,
+reducing computational complexity to approximately O(Npart (log Npart )) (Efstathiou et al.,
+1985; Barnes and Hut, 1986).
+The PM method uses a grid-based approach to calculate gravitational forces. In this
+method, particles are first interpolated onto a regular spatial grid, where the mass density
+at each grid point is calculated. The gravitational potential is then solved using Fourier
+transforms to compute the potential across the entire grid efficiently. Once the gravitational
+potential is determined, forces can be derived by taking gradients of the potential at each
+grid point, and these forces are then interpolated back to individual particle positions. The
+PM method is highly efficient for capturing long-range gravitational forces, making it ideal
+for large-scale structure simulations where large distances need to be considered. However,
+it has limited resolution at smaller scales due to the fixed grid, making it less accurate in
+dense regions like galaxy clusters.
+To enhance resolution on smaller scales, the Tree-PM Method combines the PM approach
+with a hierarchical tree structure to handle gravitational forces at varying resolutions. In
+Tree-PM, long-range forces are calculated using the PM method, while short-range forces
+are computed by organizing particles into a hierarchical tree (such as an octree in 3D). In
+this tree, particles that are spatially close are grouped into increasingly larger nodes as the
+distance from the point of interest increases. For distant particles, the gravitational influence
+is approximated by treating them as a single large mass located at the center of mass of their
+group, while nearby particles are calculated individually (Figure. 1.8). This approach allows
+for efficient calculations of both long-range and short-range interactions.
+The Tree-PM method thus provides a good balance between efficiency and accuracy by
+allowing high-resolution gravitational calculations where needed (e.g., within dense regions
+such as galaxy clusters) while maintaining computational efficiency in lower-density regions.
+11
+
+Figure 1.8 A 2-D schematic diagram of the Tree-PM method. To compute the force on the
+red particle on the top right corner, instead of separately calculating all the forces from the
+23 particles, the particles are organized in the tree like on the right. The forces from the
+particles in the grids away from the particles are approximated by the center of mass of all
+the particles in the grid. Source: Link.
+
+In SPH-based simulations, where both gas dynamics and gravitational interactions are critical, the Tree-PM approach is widely used to ensure accurate modeling of galaxy formation,
+gas inflows and outflows, as well as the cosmic web.
+
+1.5.3
+
+Subgrid Physics
+
+While cosmological simulations aim to model the large-scale structure of the universe, many
+important astrophysical processes occur on scales below the resolution of these simulations.
+For reference, the smallest particle mass achieved in a typical simulation is still approximately
+a million times larger than the mass of the Sun. These small-scale, unresolved processes are
+collectively referred to as subgrid physics. Subgrid models provide effective prescriptions for
+phenomena such as star formation, feedback from supernovae and AGN, radiative cooling,
+and chemical enrichment. By incorporating these processes, subgrid models enable simulations to better capture the evolution of galaxies, the interstellar medium (ISM), the CGM,
+and, to some extent, the IGM.
+12
+
+Figure 1.9 AGN feedback observed in a galaxy cluster MS0735. The blue color shows the
+hot Intracluster Medium (ICM) gas, and the red color shows the radio jets coming out of
+the supermassive black hole.
+
+Below, we provide an overview of the different subgrid physics included in a typical
+cosmological simulation with baryonic physics. In Chapter 2, specific subgrid physics models
+employed in the simulations used in this project will be discussed in detail.
+
+Star Formation and Stellar Feedback
+Star formation occurs on scales that are much smaller than the typical resolution of cosmological simulations, requiring subgrid models to approximate the conversion of gas into stars.
+In most simulations, gas that reaches a certain density threshold and falls within a particular temperature range is eligible to form stars. Star formation rates are often governed by
+empirical relations, such as the Kennicutt-Schmidt law (Kennicutt, 1998), which relates the
+star formation rate to gas density.
+Once stars form, they can influence their surroundings through stellar feedback, particularly through supernovae. Supernova feedback injects energy, momentum, and metals into
+the surrounding gas, which can drive winds and turbulence in the CGM, regulate star formation, and enrich the IGM with metals. These feedback processes are crucial for maintaining
+realistic galaxy evolution in simulations.
+13
+
+AGN Feedback
+The centers of galaxies host supermassive black holes (SMBHs), that accrete matter from
+their surroundings, as further discussed in Section 2.3. This accretion onto SMBHs can give
+rise to galaxies having extremely bright central regions. AGN play a significant role in galaxy
+evolution by injecting vast amounts of energy into the CGM and IGM. Subgrid models for
+AGN feedback are essential for preventing excessive cooling and star formation in massive
+galaxies. AGN feedback is typically implemented in two modes: a “quasar” mode, which
+operates during high accretion phases, and a “radio” mode, which provides continuous,
+lower-power heating to the CGM and IGM. This feedback heats and expels gas, creating
+large-scale outflows and reducing gas inflows, thus affecting the density and temperature of
+the CGM.
+
+Radiative Cooling and Heating
+Radiative cooling is another crucial subgrid process, as it determines how gas loses energy
+and condenses into galaxies. Most simulations incorporate radiative cooling functions that
+account for cooling from various elements, such as hydrogen, helium, and metals, under the
+influence of a cosmic UV background. This cooling is counteracted by heating mechanisms,
+including AGN and stellar feedback, which help maintain a balance and prevent overcooling
+of the gas within galaxies and in the CGM.
+
+Chemical Enrichment
+Subgrid models for chemical enrichment track the production and distribution of heavy
+elements generated by stellar nucleosynthesis and supernovae. As stars evolve and explode,
+they release metals into the surrounding medium, enriching the ISM, CGM, and eventually
+the IGM nearby galaxies. This enrichment affects the cooling rates of gas and has a direct
+impact on galaxy formation and evolution.
+
+Limitations
+While subgrid models enable simulations to incorporate essential astrophysical processes,
+they are inherently approximate and often rely on empirically determined parameters. Improving the accuracy of these models and aligning them more closely with observational data
+remains an ongoing challenge in cosmology. One of the primary goals of this PhD project is
+to evaluate the effectiveness of current subgrid models and explore potential improvements to
+enhance the realism and predictive power of cosmological simulations. Future advancements
+in computational power and access to high-resolution, large observational datasets will likely
+drive refinements in subgrid modeling, providing a more comprehensive understanding of the
+smaller scales.
+14
+
+1.6
+
+Research Questions and Objectives
+
+The primary goal of this research is to evaluate the properties of the CGM in cosmological
+simulations and compare them with observational data, focusing on key physical properties,
+especially on the Tmin –ρ relationship. By incorporating a larger observational dataset and by
+studying the CGM in simulations with various baryonic physics, this study seeks to answer
+the following questions:
+• How accurately do cosmological simulations represent the CGM around galaxies of
+different masses and in the reshift range 0 < z < 4?
+• What is the impact of feedback processes on the properties of the CGM, and how do
+these effects vary across different galaxy populations?
+• Is it possible to quantify the effect of feedback processes on the turbulence and ionization state of the CGM gas?
+• Can the CGM Tmin –ρ relation seen in simulations be detected in observations?
+• If detected, what is the exact form of this relation?
+• How big is the extent of the CGM around galaxies and how does it evolve with redshift?
+Through a detailed analysis of these questions, the research aims to bridge the gap between
+simulations and observations, offering a more comprehensive understanding of the CGM and
+its role in galaxy evolution.
+1.7
+
+Outline
+
+This proposal outlines my PhD research plan, divided into the following chapters:
+• Chapter 1 Introduction: We have provided the theoretical background relevant to
+this project by discussing our current understanding of the IGM and the CGM as well
+as cosmological simulations. We have also presented the limitations of current theory
+and established the research goals for this project in this chapter.
+• Chapter 2 Methodology: Here, we will describe the specifics of the observational
+data and simulation data that are available to us. We also discuss our methods for
+analyzing these data including synthetic spectra extraction and line fitting analysis.
+We will also outline the tools and techniques for comparing simulated data with observational quasar sightlines.
+• Chapter 3 Preliminary Results and Discussion: This chapter will present the
+preliminary findings from our analysis of the CGM, focusing on how different simulation models replicate observed data, such as distribution of Lyman-alpha absorbers.
+Key physical properties of the CGM will be explored, including gas density and temperature.
+15
+
+• Chapter 4 Timeline and Future Work: The final chapter will summarize the
+timeline of this project. We will discuss what we have done so far and our exact plans
+for the remaining semesters of this PhD.
+
+16
+
+CHAPTER 2
+METHODOLOGY
+2.1
+
+Observational Data
+
+The QSO spectra available to us can be divided into two categories, viz., low-redshift data
+(z<0.5) and high-redshift data (2<z<4). As the Lyman series falls into the UV range, it
+requires a space telescope to observe the Lyα forest. So far, we do not have a suitable
+telescope to observe the Lyα forest in the intermediate redshift range of 0.5<z<2. Below we
+discuss the database we use for our observational analysis.
+
+Table 2.1 Details of the QSO spectra data available to us.
+COS
+z coverage
+
+0 < zem < 0.5
+
+Resolution (km/sec)
+S/N per resolution
+Number of AGN/QSO
+Telescope/spectrograph
+Public dataset
+Reference
+
+20–24
+10-100
+∼550
+HST/COS
+HSLA
+Peeples (2017)
+
+UVES
+
+HIRES
+2 < zem < 4
+
+∼6.5
+30–200
+∼100
+VLT/UVES
+SQUAD
+Murphy et al. (2019)
+
+∼6.5
+30–200
+∼50
+Keck/HIRES
+KODIAQ
+O’Meara et al. (2015, 2017)
+
+Table 2.1 summarizes the QSO spectra data that is available to us. At hight redshift,
+we have the publicly available HIRES (High Resolution Echelle Spectrometer) QSO spectra taken from the Keck Observatory Archive and UVES (Ultraviolet and Visual Echelle
+Spectrograph) QSO spectra from the ESO (European Southern Observatory) Archive. We
+will use suitable HIRES spectra from the KODIAQ (Keck Observatory Database of Ionized Absorption toward Quasars) project (O’Meara et al., 2015) and UVES spectra from
+the SQUAD (Spectra Quasar Absorption Database) project (Murphy et al., 2019). At low
+redshift, we also have ∼ 500 HST/COS spectra publicly available from the HSLA (Hubble
+Spectra Legacy Archive) project (Peeples et al., 2017). Although the majority of these QSO
+spectra are taken to study Damped Lyman α (DLA) systems, many sightlines provide a
+long wavelength coverage sufficient for our analysis. So far we have data from analysis of
+∼100 spectra. For ground-based telescopes (VLT and Keck) information on Lyα absorbers
+in the spectra of the QSOs is restricted by the atmospheric cutoff at ∼3050 Å, meaning that
+absorbers at z ≤ 1.5 can not detected from the ground. At the HIRES and UVES resolution
+of ∼7 km s−1 , HI is fully resolved and among metal absorption lines CIV and SiIV lines are
+resolved so that a reliable absorption line parameter can be obtained using profile fitting via
+the code VPFIT (Section 2.2.4).
+17
+
+2.2
+
+Line Profile Analysis
+
+In high resolution spectra (FWHM <25 kms−1 ), it is possible to resolve individual absorption
+lines in the Ly-α forest. This section will discuss the theory and methods used for our
+absorption line profile analysis.
+2.2.1
+
+Optical Depth
+
+The optical depth (τ ) is a measure of the absorption strength at a specific wavelength and
+is fundamental to understanding the absorption features in the Lyα forest. In the context of
+absorption lines, optical depth quantifies the likelihood that photons are absorbed as they
+pass through an absorbing medium—in this case, neutral hydrogen in the IGM.
+As shown in Figure 2.1, consider a beam of light of wavelength near to that of Lyα, with
+an initial intensity I0 , passing through a homogeneous cloud with neutral hydrogen (HI)
+number density nHI . Let us assume that the cross-section of a single HI atom is σ. In reality,
+this cross-section will be more like a probability distribution of the electron cloud around
+the nucleus. When the light travels through an infinitesimal distance of dl, the change in
+intensity would be,
+
+Figure 2.1 A beam of light passing through a cylinder of absorbers. Photon gets absorbed
+as it hits an absorber.
+
+dI = −I0 nHI σdl.
+
+(2.1)
+
+dτ ≡ nHI σdl.
+
+(2.2)
+
+We define
+
+Then, integrating eq.2.1 along the path of the light gives us
+Iout = I0 e−τ
+
+(2.3)
+
+As optical depth gets larger, the amount of light transmitted drops exponentially. When
+τ < 1, the gas is considered to be optically thin or transparent and when τ ≫ 1, the gas is
+considered to be optically thick, or opaque.
+18
+
+2.2.2
+
+Line Broadening
+
+Ideally, spectral absorption lines occur at the resonant frequency, where the frequency is
+related to the energy difference between the two energy states of the electron via
+(Ei − Ef ) = hν.
+
+(2.4)
+
+However, in reality the absorption (or emission) lines are never monochromatic in observations. There are several reasons for this. A few common line broadening mechanisms
+outlined below are: natural line broadening, Doppler broadening, collision broadening and
+instrumental broadening.
+
+Figure 2.2 Visualization of uncertainty in ν from Heisenberg’s uncertainty principle.
+Natural broadening of an absorption line profile originates from Heisenberg’s uncertainty
+principle:
+∆E∆t ≥ ℏ/2,
+
+(2.5)
+
+where ∆E is the uncertainty in the energy of the state and ∆t is the uncertainty in
+the occupation time of the state (∝ half-life). Due to this the absorption line spreads from
+looking like a Dirac delta function to a line profile with a shape given by a Lorentzian
+distribution of the form:
+∆νN /2
+L(ν) =
+,
+(2.6)
+(ν − ν0 )2 + (∆νN /2)2
+where ν0 is the resonant frequency of the transition and ∆νN = 2π/t1/2 is called the natural
+line width corresponding to that transition. Eq. 2.6 can be derived by considering the
+electron-proton system as a classical damped harmonic oscillator in the small damping regime
+(∆νN ≪ ν0 ).
+Another source of absorption line broadening is the thermal/Doppler broadening which
+originates from the temperature of a gas cloud. At a temperature T, the thermal velocities
+19
+
+of individual gas particles follow the Maxwell-Boltzmann distribution. Hence the thermal
+velocity dispersion is
+r
+2kB T
+vth =
+,
+(2.7)
+m
+where kB is the Boltzmann constant, and m is the mass of an individual gas atom. This distribution in velocity also means that the absorption line from the gas cloud will by smoothened
+due to Doppler shift. So, the line width associated with the Doppler broadening would be
+vth
+ν0 .
+(2.8)
+∆νD =
+c
+We write the expression for line profile broadening in terms of this Doppler width(∆νD ) as
+1 −( ν−ν0 )2
+G(ν) = √ e ∆νD
+π
+
+(2.9)
+
+Apart from the two processes above, observed absorption lines can be further smoothed
+by collisions and turbulence in the gas, as well as by the line spread function (LSF) of
+the instrument itself. The latter can be easily accounted for by knowing the LSF of the
+instrument in a controlled environment.
+Line widths from collisions, again follows a Lorentzian profile since the inelastic collisions
+can be seen as changes in energy states as in the case of natural broadening. So to the total
+width of the Lorentzian profile due to both of these factors would be
+∆νL = ∆νN + ∆νcoll.
+
+(2.10)
+
+Meanwhile, depending on the velocity distribution, the smoothing due to turbulence can
+be either Gaussian or non-Gaussian. Since the actual mechanism of the turbulence is not
+understood in detail, any excess spread in the absorption line width is attributed to nonthermal processes through a single parameter (discussed in 2.2.4).
+2.2.3
+
+Voigt Profile
+
+Accounting for the factors in the previous subsection, the overall profile of an absorption
+line would be a combination of the Lorentzian and the Gaussian profiles. This is given by
+the Voigt profile, named after a German physicist Woldemar Voigt.
+First, for simplification, we define the following variable:
+x≡
+
+ν − ν0
+,
+∆νD
+
+(2.11)
+
+a≡
+
+∆νL
+.
+2∆νD
+
+(2.12)
+
+and the parameter:
+
+So, equations 2.6 and 2.9 become
+1 2
+G(x) = √ ex ,
+π
+20
+
+(2.13)
+
+and
+
+a
+1
+.
+(2.14)
+2
+π x + a2
+The Voigt profile, then, is defined as the convolution of the Lorentzian and the Gaussian:
+Z ∞
+1
+H(a, x),
+(2.15)
+V (x) =
+L(x − y)G(y)dy = √
+π∆νD
+−∞
+L(x) =
+
+where
+a
+H(a, x) =
+π
+
+Z ∞
+
+2
+
+e−y
+dy
+2
+2
+−∞ (x − y) + a
+
+(2.16)
+
+is the Voigt-Hjerting function (Hjerting, 1938). Eq. 2.15 gives the overall normalized line
+profile of an absorption line. To get the absorption cross-section (eq.2.2), we need to multiply
+it by a proportionality constant which can be derived from dispersion theory of electromagnetic waves in an absorbing medium. Then we will have,
+σx =
+
+πe2
+f V (x)
+me c
+
+(2.17)
+
+or,
+
+√ 2
+πe
+σx = f
+H(a, x),
+(2.18)
+me c∆νD
+where f is known as the oscillator strength or the probability of occurrence of the transition.
+Finally we can replace σ in eq.2.2 and get the Ly-α optical depth,
+√ 2
+πe
+τLyα = fLyα NHI
+H(a, x),
+(2.19)
+me c∆νD
+R
+where NHI = nHI dl is the column density of neutral hydrogen integrated along the line
+of sight. This equation is used commonly for fitting absorption lines with Voigt profiles,
+characterizing each absorber by the column density and the line width. The resultant profile
+combine properties of both Lorentzian and Gaussian profiles as shown in Figure 2.3.
+2.2.4
+
+VPFIT: Voigt Profile Fitting for Absorption Line Analysis
+
+To analyze the Lyman-alpha forest and other absorption features in quasar spectra, we use
+VPFIT, a Voigt profile fitting software developed by Carswell and Webb (2014). VPFIT
+is widely adopted for precision analysis of absorption lines. VPFIT allows us to decompose
+complex absorption spectra into individual Voigt profiles, which describe the shape of absorption lines due to a combination of Doppler and natural broadening effects. By fitting
+these profiles, we can determine the physical properties of the gas along the line of sight, such
+as column densities, temperatures, and turbulent velocities, enabling detailed comparisons
+between simulated and observed spectra.
+VPFIT iteratively adjusts parameters such as the central wavelength, column density,
+and Doppler broadening parameter until it finds an optimal fit for each absorption feature.
+21
+
+Figure 2.3 A visualization of the Voigt profile as a combination of a Lorentzian and Gaussian
+Profile. Credits: Demtröder (2008).
+This process enables the precise extraction of gas properties from each fitted line. The key
+parameters obtained through VPFIT fitting include:
+- Column Density (NHI ): Represents the amount of neutral hydrogen along the line
+of sight for each absorption feature. The usual unit for column density fits from VPFIT is
+log10 (NHI /cm−2 ).
+- Doppler Parameter (b): A measure of the line width, which can indicate thermal
+motion (temperature) and small-scale turbulence within the absorbing gas. The unit of b
+from VPFIT is in kms−1 and is given by eq. 2.7 plus any width contribution from nonthermal motion.
+r
+b=
+
+2kB T
++ b2non−thermal
+mX
+
+(2.20)
+
+Note that the contribution of non-thermal motion to the line width can be found if we fit
+absorption lines of two different species (e.g., HI and CIV) coming from the same gas cloud
+assuming that both species are at the same temperature and have the same non-thermal
+velocity distribution within that gas cloud.
+- Redshift (z): The redshift of each absorption feature reveals the relative velocity and
+distance of the gas, allowing for the reconstruction of large-scale structure along the sightline.
+An example of fitted absorption lines can be seen in Figure 2.4. For this project, VPFIT is applied to synthetic spectra generated from cosmological simulations, as well as to
+observational spectra of quasars. By comparing the fitted column densities and Doppler pa22
+
+Figure 2.4 Absorption lines in a spectra fitted using VPFIT. The magenta lines indicate
+individual profiles and the black line is the combined profile after adding all the individual
+absorption lines. The table on the right gives the best fit parameters of NHI and b values
+each absorption line in the figure.
+rameters in both datasets, we aim to assess how well the simulations replicate the observed
+properties of the IGM and the CGM.
+While VPFIT provides highly accurate fits to absorption lines, there are uncertainties
+associated with the decomposition of blended lines, especially in regions with saturated absorption. These uncertainties can affect the inferred column densities and temperatures,
+potentially biasing comparisons between simulations and observations. To mitigate these effects, this study includes error analysis on fitted parameters and cross-checks with alternative
+fitting techniques when possible.
+2.3
+
+Cosmological Simulations to be Analyzed during this PhD Thesis
+
+The core of this research involves the use of large-scale cosmological simulations to study
+the CGM and its relationship with galaxies. Two primary simulations are employed: the
+Sherwood simulations and the Illustris-TNG simulation suite, described below. Both simulations model the formation and evolution of structures in the universe, but with different
+emphases on physical processes and resolutions.
+2.3.1
+
+The Sherwood Simulations
+
+The Sherwood Simulation suite (Bolton et al., 2017) is a collection of high resolution hydrodynamical simulations to study the diffuse gas in the universe. The simulations are
+performed at different resolutions, and of particular interest for this thesis, implement a
+variety of feedback physics including models for galactic outflows such as stellar wind and
+23
+
+AGN feedback. Table 2.2 lists the simulations which are currently being used in our work;
+further entries will be added as our work progresses.
+The simulations are based on the code P-GADGET-3 with modifications applied for different physics for different simulation boxes. P-GADGET-3 is a Tree-PM SPH code and
+it is an updated and extended version of the publicly available code GADGET-2 (Galaxies
+with dark matter and gas interact) published in Springel (2005). The cosmological parameters used in the models is obtained from Planck Collaboration et al. (2014), where
+Ωm = 0.308, ΩΛ = 0.692, h = 0.678, Ωb = 0.0482, σ8 = 0.829, and n = 0.961.1 A primordial helium fraction of Yp = 0.24 is assumed. The initial conditions are generated at the
+redshift of z = 99 on a regular grid using transfer functions generated by CAMB (Code
+of Anisotropies in Microwave background; Lewis et al. (2000)). The SPH parameters are
+Nnb = 64 and lsoft = 1/25th of mean inter-particle spacing (∼ 1 − 2 h−1 cMpc).
+The simulations used in this project (Table 2.2) are performed in two different box sizes:
+40 h−1 cMpc and 60 h−1 cMpc, with the smaller ones having higher resolution than the larger
+ones. The 60 h−1 cMpc boxes have four variants of subgrid physics and have outputs at
+z < 2.6, while the 40 h−1 cMpc boxes have only two variants of subgrid physics and have
+outputs at z > 2. At each resolution we have a “no feedback” variant, which does not
+implement any subgrid physics. In these runs, gas particles with temperature T< 105 K and
+overdensity ∆(= ρ/ρcrit ) > 103 are converted into collisonless star particles.2 On the other
+hand, the runs with subgrid physics are: “Only stellar wind”, “Stellar wind + AGN
+feedback”, and “Stellar wind + Strong AGN feedback”. For the higher resolution
+boxes, the only run with subgrid physics is the Stellar Wind + AGN run. The boxes of the
+same size have the same initial conditions, and hence have the same large scale structures
+for one to one comparison.
+The Wind Model
+The subgrid physics models used in these simulations are taken from the model S15 in
+(Puchwein and Springel, 2013). The velocity of the wind coming out of a galaxy is taken to
+be directly proportional to the escape velocity of the galaxy:
+vw = κ × vesc ,
+
+(2.21)
+
+where κ = 0.6 is the constant of proportionality which fits best with the observations. The
+escape velocity vesc of the galaxies is calculated assuming a Navarro-Frenk-White (NFW)
+1
+
+Ωm , ΩΛ , Ωb are the fractional density of matter, cosmological constant, baryons in the current Universe
+respectively.
+h is the reduced hubble constant,
+σ8 is the matter density fluctuation on scales of 8h−1 Mpc, and
+n is the scalar spectral index of the primordial power spectrum.
+2
+
+2
+
+(z)
+ρcrit (z) = 3H
+8πG is the critical density of the universe at redshift z.
+
+24
+
+Table 2.2. List of Simulations Analyzed from the Sherwood simulation suite
+Model
+
+Lbox
+(h−1 cMpc)
+
+Npart
+
+Mgas
+(M⊙ )
+
+z
+(Snapshots Used)
+
+Comments
+
+No feedback
+wind+AGN
+wind+strongAGN
+Only wind
+
+60
+60
+60
+60
+
+2 × 7683
+2 × 7683
+2 × 7683
+2 × 7683
+
+6.38 × 106
+6.38 × 106
+6.38 × 106
+6.38 × 106
+
+0.1, 0.3, 2.2, 2.4
+0.1, 0.3, 2.2, 2.4
+0.1, 0.3, 2.2, 2.4
+0.1, 0.3, 2.2, 2.4
+
+No feedback hires
+
+40
+
+2 × 10243
+
+7.97 × 105
+
+2.2, 2.4, 3.6
+
+wind+AGN hires
+
+40
+
+2 × 10243
+
+7.97 × 105
+
+2.2, 2.4, 3.6
+
+Model H02 from Bolton et al. (2022)
+Model AGN from Bolton et al. (2022)
+Model StrongAGN from Bolton et al. (2022)
+Same as wind+AGN,
+but AGN feedback turned off
+Model from Puchwein et al. (2022)
+(same as No feedback but higher resolution)
+Same as wind+AGN,
+but higher resolution
+
+profile for the halos:
+s
+vesc = v200c
+
+2c
+,
+ln(1 + c) − c/(1 + c)
+
+(2.22)
+
+with
+c ≡ rs /r200c
+
+(2.23)
+
+and
+v200c =
+
+p
+GM200c /r200c
+
+(2.24)
+
+where c is the concentration parameter of the halo, rs is the NFW scale radius, r200c is
+the radius at which the mean enclosed density of the halo is 200ρcrit , M200c is the total mass
+enclosed by r200c , and v200c is the circular velocity at r200c .
+The amount of gas entering into the wind is taken from Springel and Hernquist (2003),
+where the energy available for the wind particles is proportional to the star formation rate
+(Ṁ∗ ) and supernova fraction (ϵSN ):
+1
+Ṁw vw2 ∝ ϵSN Ṁ∗
+(2.25)
+2
+In galactic wind models, the mass loading factor defined by η ≡ Ṁw /Ṁ∗ is of particular
+importance. In our case, where the galactic winds are driven by energy, the mass loading
+factor scales as η ∼ vw−2 . So larger halos will have a significantly larger fraction of mass
+outflows, and thereby suppress star formation to a greater extent compared to smaller halos.
+The AGN feedback model
+Also taken from Puchwein and Springel (2013), the AGN feedback models seed supermassive
+blackholes (BHs) of mass mBH,seed = 104 h−1 M⊙ into the centers of halos when they exceed
+5 × 1010 h−1 M⊙ . The BH particles are treated as collisonless sink particles that grow with gas
+accretion and by merging with other BH particles (Sijacki et al., 2007). Two BH particles
+are merged when they are within their SPH smoothing scale and have velocities smaller than
+the local sound speed. For simplicity, the BH particles are re-centered to the minimum of
+the potential well of the halo at every time step.
+25
+
+As mentioned in Chapter 1, the AGN feedback is divided into two modes: ‘quasar mode’
+and ‘radio mode’. This is motivated from both theory and observations such as Gallo et al.
+(2003); Croton et al. (2006). These modes are dependent on the accretion rate of the BH.
+The accretion rate of a BH particle is calculated using the Bondi-Hoyle-Lyttleton formula:
+ṀBH =
+
+2
+4παG2 MBH
+ρ
+,
+2
+2
+3/2
+(cs + v )
+
+(2.26)
+
+where α is a dimentionless parameter used to boost the accretion rate, ρ is the local density,
+cs is the local sound speed of the gas, v is the velocity of the BH relative to the gas (v = 0
+in our case). An upper limit for the accretion is also imposed in the simulations to be equal
+to the Eddington limit:
+4πGMBH mp
+,
+(2.27)
+ṀEdd =
+ϵr σT c
+where mp is the proton mass, σT is the Thompson cross-section and ϵr is the radiative
+efficiency assumed to be equal to 0.1.
+The quasar mode is active when the accretion rates are high (ṀBH > 0.01 × ṀEdd ). In
+this regime, BHs accrete efficiently and power luminous quasar activity where only a very
+small fraction of the luminosity thermally couples to the surrounding medium. In both
+wind+AGN and wind+strongAGN models 0.5 per cent of the accreted rest mass energy is
+thermally coupled to the surrounding gas.
+At lower accretion rates (ṀBH < 0.01× ṀEdd ), AGN heating happens through radiatively
+inefficient feedback in a mostly mechanical form. This is realized in the simulation by
+injecting bubbles into the host galaxy/cluster triggered by a fractional increase in the BH
+mass. In the wind+AGN model, a fractional increase (δMBH ) in the black hole mass of
+104 , with 2% of the rest mass energy used for injecting hot AGN bubbles. Whereas, for
+the wind+strongAGN model, δMBH is increased to 10−2 , with 8% energy being used to
+inject AGN bubbles. This leads to a less frequent but stonger bubble injection, resulting in
+significantly less gas fraction nearby halos.
+2.3.2
+
+The IllustrisTNG Simulations
+
+The IllustrisTNG (The Next Generation) simulation suite (Springel et al., 2018) is a set of
+state-of-the-art cosmological hydrodynamical simulations designed to model accurate subgrid
+physics. This suite builds on the original Illustris project (Vogelsberger et al., 2014), with
+updates in feedback physics, improved resolution, and a refined cosmological model. Table
+2.3 lists the specific IllustrisTNG simulations used in this project, detailing the box sizes,
+resolution, and available redshift snapshots.
+The simulations are performed using the AREPO code (Weinberger et al., 2020), a
+moving-mesh hydrodynamics solver that combines the strengths of SPH and traditional
+grid-based methods. AREPO’s moving-mesh approach provides greater accuracy in modeling gas dynamics across a wide range of densities, making it particularly effective for
+26
+
+Table 2.3. The IllustrisTNG Simulation Suite
+Model
+
+Lbox
+(h−1 cMpc)
+
+Npart
+
+Mgas
+(M⊙ )
+
+MDM
+(M⊙ )
+
+TNG50
+
+35
+
+2 × 21603
+
+8.5 × 104
+
+4.5 × 105
+
+TNG100
+
+75
+
+2 × 18203
+
+1.4 × 106
+
+7.5 × 106
+
+TNG300
+
+205
+
+2 × 25003
+
+1.1 × 107
+
+5.9 × 107
+
+capturing the details of turbulence and shocks on smaller scales. All runs in the IllustrisTNG suite employ cosmological parameters from Planck Collaboration et al. (2016),
+with Ωm = 0.31, ΩΛ = 0.69, h = 0.677, Ωb = 0.0486, σ8 = 0.8159, and ns = 0.97.
+Box Sizes, Resolution, and Redshift Coverage
+The IllustrisTNG suite includes three main box sizes—TNG50, TNG100, and TNG300—which
+vary in both volume and resolution. These boxes cover a range of cosmic scales, enabling
+studies of everything from detailed galaxy evolution to large-scale cosmic web structure:
+1. TNG50: This box spans 50 Mpc per side and has the highest resolution, with particle
+masses of 8.5 × 104 M⊙ for baryons. It is ideal for detailed studies of small-scale galactic
+structures and CGM properties, particularly at low redshifts.
+2. TNG100: Spanning 100 Mpc per side, this intermediate-resolution box provides a
+balance between computational efficiency and physical detail, with baryonic particle masses
+of 1.4 × 106 M⊙ . TNG100 is well-suited for studying galaxy evolution and CGM dynamics
+across a range of redshifts.
+3. TNG300: The largest box, at 300 Mpc per side, TNG300 is optimized for capturing
+large-scale structure and the evolution of massive galaxy clusters. With baryonic particle
+masses of 1.1 × 107 M⊙ , it is less detailed on small scales but highly effective for large-scale
+statistical studies.
+Each of these runs includes a total of 100 snapshots3 in the redshift range of 0 ≤ z ≤ 20,
+allowing for evolutionary studies from early times up to the present day. This broad redshift
+coverage is essential for analyzing how the CGM and IGM evolve in response to galactic
+feedback processes over cosmic time.
+Subgrid Physics Models
+IllustrisTNG incorporates a range of subgrid models that capture critical astrophysical processes, including star formation, stellar feedback, black hole growth, and AGN feedback.
+3
+
+A snapshot is defined as all the data of a simulation box at a specific redshift.
+
+27
+
+These models are designed to reproduce observed properties of galaxies, such as their stellar
+mass, gas content, and metallicity.
+1. Stellar Feedback: Instead of scaling the wind velocity with the escape velocity, the
+TNG suite implements the stellar feedback model where vw scales with the the local, onedimensional DM velocity dispersion (σDM ). They also set a minimum wind velocity injection
+vw,min = 350 kms−1 :
+#
+"
+1/3
+
+H0
+, vw,min ,
+(2.28)
+vw = max 7.4 × σDM
+H(z)
+where H0 and H(z) are the present day Hubble constant and the Hubble parameter at redshift
+zrespectively. More details can be found in Vogelsberger et al. (2013) and Pillepich et al.
+(2017).
+2. Black Hole Accretion and Feedback: In TNG, BH particles of mass 8×105 h−1 M⊙
+are seeded into halos above the mass 5×1010 h−1 M⊙ . The accretion rates are calculated using
+2.26, but without the boosting factor α. Similar to Sherwood, TNG also implements AGN
+feedback in two different modes. The accretion rate threshold for differentiating between
+high/low accretion mode now scales with the BH mass,
+#
+" 
+β
+MBH
+, 0.1 ,
+(2.29)
+χ = min χ0
+108 M⊙
+where β = 2.0 and χ0 = 0.002.
+In high accretion quasar mode 2% of the rest mass energy of the accreted gas is injected
+into the gas surrounding the BH in the form thermal energy. In the low accretion mode,
+a kinetic BH-driven wind is implemented in place of the bubble model. In this mode, the
+energy is injected into wind particles as pure kinetic energy instead of thermal energy. The
+fraction of energy injected this way is kept at < 2%, however this is also density dependent
+to make sure that such winds do not drive the gas density to an unrealistically low values in
+low density halos. More details can be found in Weinberger et al. (2017).
+3. Magnetic Fields and Other Subgrid Physics: IllustrisTNG is one of the first
+large-scale cosmological simulations to include a full magnetohydrodynamic (MHD) treatment, allowing for the evolution of cosmic magnetic fields. This addition enables a more
+realistic model of gas dynamics and pressure support in the CGM, particularly in dense
+regions around galaxies.
+IllustrisTNG also includes detailed models for radiative cooling, including metal-line
+cooling and photoionization by a uniform UV background (Haardt and Madau, 2012). The
+metal enrichment model tracks multiple species (e.g., Fe, O, C) produced by supernovae
+and stellar winds, enriching the gas over time. This enriched gas can cool more efficiently,
+influencing the formation of subsequent generations of stars and altering the CGM’s thermal
+properties.
+Although only one kind of subgrid physics model is applied in the all the simulation
+runs, the richness of the physics and large redshift coverage make IllustrisTNG a versatile
+28
+
+tool for studying the CGM and IGM. TNG50’s high resolution allows for detailed studies
+of small-scale CGM structure, while TNG100 and TNG300 provide a statistical approach
+to large-scale structure and galaxy evolution. By comparing results across different runs, it
+is possible to analyze how stellar and AGN feedback influence gas properties, metallicity,
+and density in the CGM over cosmic time, providing insights into the relationship between
+galaxies and their gaseous halos. For comparison with the 60cMPc boxes of Sherwood, we
+will mainly focus on the simulation TNG100 (75cMpc) in this project.
+2.4
+
+Simulation Data Analysis
+
+We analyze the simulation data with two approaches. First, to compare the Lyα forest statistics in observation, we shoot lines of sight (LOSs) across the simulation boxes at thousands
+of random locations. We obtain several physical properties of the gas along these LOSs such
+as density, temperature, metallicity, HI fraction, peculiar velocity, etc. Most importantly, we
+also obtain the optical depth for different absorption lines along the LOS. From the optical
+depth, we create thousands of mock spectra which would be equavalent to QSO spectra
+in observations. The second approach focuses more on the halos, where we target specific
+isolated galaxies and look at the properties of these targets at different redshifts.
+2.4.1
+
+Mock Spectra from Simulation
+
+The method for extracting LOS spectra from the simulation boxes follows from Theuns et al.
+(1998). We divide the LOS into bins of npix = 2048 pixels of width ∆ along the sightline.
+Using eq. 1.2, with a weight factor indicating the fractional abundance of the species (HI
+fraction for Lyα), we compute the density ρX , density-weighted temperature (ρT )X and
+density-weighted velocity (ρv)X at each bin. Once we have these values, we calculate the
+optical depth in each bin by using eq. 2.19. We convert eq. 2.19 to wavelength space from
+frequency space for convenience:
+τλ = σ α √
+
+cNX
+H(a, x),
+π∆λD
+
+(2.30)
+
+where σα is the cross-section, NX = ρX ∆ is the column density of the species, and ∆λD
+is the Doppler width of the species in wavlength space with the temperature information
+inside.
+For Lyα, the cross-section is σα = (3πσT /8)1/2 fLyα λ0 = 4.45 × 10−18 cm2 , with oscillator
+strength fLyα = 0.41615, the Thomson cross-section σT = 6.625 × 10−25 cm2 , and the rest
+wavelength corresponding to resonant frequency of Lyα λ0 = 1215.67Å. The calculated
+optical depth can then be redshifted to the observed wavelength using the relation
+λ = λ0 (1 + z)(1 + v/c),
+where v is the peculiar velocity.
+29
+
+(2.31)
+
+The HI optical depth is then rescaled according the mean observed flux using a power
+law from Kim et al. (2007)
+eff
+= 0.0023 ± (1 + z)3.65 .
+(2.32)
+τHI
+The optical depth is then converted into flux using eq. 2.3. For a better comparison
+with the observed spectra, the extracted spectra are convolved with an appropriate LSF
+(FWHM∼7kms−1 ) and a gaussian noise with an appropriate S/N (∼100). Once all the
+post-processing steps are done, the spectra are fitted using VPFIT as described in Section
+2.2.4.
+2.4.2
+
+Individual Galaxy halos in Simulation
+
+To investigate the CGM around galaxies, we look at halos of isolated galaxies in different
+mass ranges. For IllustriTNG, we do this using the publicly available Group and Subhalo
+catalogues which are obtained using the Subfind algorithm (Springel et al., 2001). A merger
+tree of subhalos for each simulation run is also available using which each galaxy can by
+tracked at different snapshots. For the Sherwood simulations, we run the ROCKSTAR
+(Robust Overdensity Calculation using K-Space Topologically Adaptive Refinement) halo
+finder algorithm (see Behroozi et al. (2013) for more details) on all the available snapshots.
+Obtaining a merger-tree is not possible since the available snapshots are too far apart in
+time. So a halo is tracked in a different snapshot by searching for a halo with appropriate
+mass ratio (given the approximate growth rate of structure) inside an appropriate region
+along with visual inspection.
+In the next Chapter, we discuss the results we have obtained so far using the methods
+described in Chapter 2.
+
+30
+
+CHAPTER 3
+PRELIMINARY RESULTS AND DISCUSSION
+So far, we have been analyzing the simulation boxes at two redshifts: z=0.1 and z=2.4,
+considering only the TNG100-1 and Sherwood 60cMpc simulations. In this chapter, we
+discuss our preliminary findings from our analysis.
+
+3.1
+
+Individual Halo Analysis
+
+We start by looking at the properties of the gas around the same halo in different feedback
+regimes. For this we make 2-D projected plots of gas density, temperature, HI column
+density, etc. in the regions around halos to visually investigate any differences.
+To do this, we first obtain the halo catalogues of all the simulation boxes either using
+the Illustis API for TNG or running ROCKSTAR on the Sherwood snapshots. Once we
+have the halo catalogues, we bin the halos according to their mass in several bins such as
+1010.75 −1011.25 , 1011.75 −1012.25 , 1012.75 −1013.25 M⊙ , etc. Since our project focuses on the cold
+CGM, we avoid halos hosting groups/clusters of galaxies. Such halos host hot gas (T > 106 K)
+in the ICM which we cannot observe in the Lyα forest. Soft X-ray telescopes/spectroscopes
+are needed to observe such gas. Keeping this in mind, we search for isolated galaxies. This
+is done by comparing the mass of the halo to any other satellite halo nearby. If no other halo
+of significant mass is present within an appropriate distance, i.e., no massive substructure is
+present within the galaxy halo, we select that halo for our analysis.
+
+3.1.1
+
+Gas Density
+
+In Figure 3.1, we show the projected gas density of a halo in different feedback physics. The
+upper panels shows a halo of mass ∼ 1011 M⊙ and the lower panels show a halo of mass
+∼ 1012 M⊙ . Note that the two halos in the upper and lower panel are different as we are still
+trying to figure out the best way to track a halo in different snapshots since the snapshots
+available from Sherwood simulations are far apart, unlike TNG.
+At z=2.4, we do see a difference in gas mass in the halo in the No feedback run compared
+to the run with subgrid physics. This is because without any outflows, star formation rate is
+much higher and the halo runs out of gas very rapidly by forming stars. However, the gas is
+seem to be insensitive to AGN feedback, as small halos like these do not have a supermassive
+black hole (SMBH) powerful enough to have an impact on the gas.
+In contrast, the halo at z=0.1 looks significantly different in each simulation. The halo
+with no feedback has less gas than the one with only stellar wind due to the reasons mentioned
+above. However, when AGN feedback is turned on, we see that a substantial amount of gas
+has escaped to outside of the virial radius (Rvir ) of the halo. This effect is very prominent in
+the strong AGN feedback run where virtually no gas is left inside the halo. We will investigate
+31
+
+Figure 3.1 Projected gas density of a halo in four different feedback physics of Sherwood
+simulations. The mass of the halo at z=2.4 is ∼ 1011 M⊙ , and z=0.01 is ∼ 1012 M⊙ . The
+cyan circle represents the virial radius of the dark matter halo. We see that at higher
+redshifts, AGN feedback is not significantly changing the gas distribution but as we come to
+lower redshift, the stronger AGN feedback drives almost all of the gas out of the halo region.
+
+Figure 3.2 Gas density projection of a galaxy of mass 1012.38 M⊙ at z=0.1 (left) and z=2.4
+(right) in TNG100-1.
+this effect further, to see if lower redshift CGM observations can be used to constrain the
+strength of AGN feedback in the universe.
+A similar plot for a halo in TNG100-1 as seen in Figure 3.2. With much higher resolution
+and superior subgrid physics, we can see much finer substructure in the galaxy including
+the spiral arms. Direct visual comparison with the Sherwood halos is not possible. For
+32
+
+Figure 3.3 Left: Projected gas density map of a thin slice centered at the same halo in no
+feedback and wind+AGN simulation. Middle: Zoomed-in projection map of the gas density.
+Right: 2-D temperature map around the halo.
+comparison, further analyses such as looking at radial profiles, statistics of several halos in
+a mass bin needed.
+
+3.1.2
+
+Temperature
+
+We also look at the effect of the feedback process on the gas temperature surrounding halos.
+The right panels of Fig. 3.3 show the gas temperature of the same halo in no feedback and
+wind+AGN simulation at z=0.1. The difference is more visible further away from the halo
+where gas temperature is higher with feedback compared to no feedback. Note that the
+leftmost panels shows the location of the halo in the cosmic web where we can see the gas is
+more diffuse in the wind+AGN box.
+A closer look at the gas temperature is done by filtering out gases in different temperature
+bins. We plot 2-D gas density of the gas in three temperature bins: 103.5 −104 K, 104 −104.5 K,
+104.5 − 105 K. In Figure 3.4, see the difference more clearly. In the wind+AGN halo, almost
+no gas is present in the lowest temperature bin near the center of the halo, while relatively
+little gas is present in the intermediate bin. In the 104.5 − 105 K bin however, we see more
+gas, which tells us that AGN feedback is heating up the CGM which could potentially make
+this gas too ionized to be observable in Lyα absorption.
+33
+
+Figure 3.4 Gas density map around the halo in fig. 3.3, in three different temperature bins.
+The white region implies there is no gas in that temperature bin inside that region.
+We also examine the distribution of the gas in the temperature density plane. Fig. 3.5
+shows the correlation between temperature and density in the vicinity of the halo in Fig.
+3.1 at z=2.4. At this redshift, gas is not as hot as the previous example at z=0.1. We can
+clearly see the negative correlation between temperature and density where the densest gas
+is also the coldest due to radiative cooling. The right hand panels shows the column density
+of HI which tells us that the gas in the outer CGM should be seen in Lyα absorption. This is
+shown in figure 3.6, where we shoot an LOS at an impact parameter of 0.75Rvir . A saturated
+Lyα absorption line is seen in the extracted spectrum. Targeted LOSs such as this one would
+be helpful in understanding how CGM should look like in observed QSO spectra. In future,
+we also plan to look at metal absorption lines coming from these gas clouds by predicting the
+metal abundance present in the gas clouds using the prescriptions contained in the CLOUDY
+code (Chatzikos et al., 2023) and calculating optical depths for metal species such as CIV
+and SIV along the LOS.
+
+3.2
+
+Statistical Analysis
+
+In our statistical approach which is more relevant for comparison with observed data, we
+shoot thousands of LOSs in each simulation box and extract spectra along them. The details
+of this method are in section 2.4. So far we have 16384 lines per Sherwood snapshot in Table
+34
+
+Figure 3.5 Left: Distribution of gas particles in the temperature-density plane around the
+halo in upper panels of Fig. 3.1 in the Sherwood wind+AGN simulation at z=2.4. Middle:
+A 2-D projected temperature map of the halo. Right: A column density map of the neutral
+hydrogen in the halo. The negative T − ρ relationship can be clearly seen in all the plots
+where temperature is coldest at the densest regions.
+
+Figure 3.6 An example mock Lyα spectrum extracted from a halo in Sherwood wind+AGN
+simulation at z=2.4. The yellow arrow in the upper panel shows the position and direction
+of the line of sight with respect to the halo. The LOS has an impact parameter of 0.75Rvir
+from the center of the halo. The absorption line is well saturated as expected from a dense
+gas cloud in the CGM. This is the same halo shown in Figs. 3.1 and 3.5.
+
+35
+
+Figure 3.7 Top: Raw spectrum of a random line of sight in wind+strongAGN at z=0.1.
+Middle: Comparison between the volume-weighted density (blue) and optical depth-weighted
+density (red).
+Bottom: Comparison between the volume-weighted temperature (blue) and optical depthweighted temperature (red).
+
+2.2 readily available as part of on the fly LOS extraction in the Sherwood run. We have
+also extracted 5000 random LOSs for TNG100-1 at z=0.1. These spectra are fitted using
+the automatic fitting feature in VPFIT which gives us a list of column density and Doppler
+width b values for all of the absorbers along these LOSs. The temperature and density
+in the initial LOS file is volume-weighted which is not desirable for studying absorbers in
+CGM as the values would be dominated by low density (higher volume) regions. So, once
+we obtain the optical depth, we also compute the optical depth-weighted temperature and
+density along the LOS (Figure 3.7).
+36
+
+Figure 3.8 Distribution of 6000 absorbers in N-b plane (top) and T-ρ plane (bottom) at z=0.1
+for no feedback (Left), wind+AGN (middle) and wind+strongAGN (Right) simulation runs.
+After this we investigate the distribution of the absorbers in the NHI-b plane, as well
+as the T-ρ plane. Figure 3.8 shows the preliminary results of such an analysis at z=0.1.
+We see that the distribution of the absorbers for different feedback physics is significantly
+different. Without any feedback there is no high density gas cloud as the cold dense gas has
+already been accreted by the galaxies to form stars and the hot gas is not detectable via
+the Lyα forest. The gas in wind+AGN run seems promising as the turnover is clear in the
+T-ρ plane and we can also see a hint of a turn over in the N-b plane. Further analysis such
+as fitting a power-law and how the turnover evolves with redshift is required for a better
+understanding. The gas in the wind+strongAGN run on the other hand is widely distributed
+along the vertical (temperature) axis and very few absorbers are in the high density+cold
+temperature region. However we do see a turnover and it should be more visible as we fit
+more spectra. We also need to investigate how different the T-ρ relation is compared to the
+wind+AGN run. In contrast, at z=2.4, Figure 3.9 shows little difference between the no
+feedback and wind+strongAGN run. This is consistent with what we saw in our individual
+halo analyses.
+
+37
+
+Figure 3.9 Line width (b) vs column density distribution of 14000 Lyα absorbers from random
+LOSs at z=2.4 in the Sherwood No feedback (left) and wind+strongAGN (right) runs. The
+wind+strongAGN absorbers seem to have a significantly wider distribution along the b-axis
+which is expected from a hotter IGM. However, in the CGM region, number of absorbers is
+still very sparse. A similar analysis needed by targeting LOSs nearby galaxies to investigate
+this region further.
+
+38
+
+CHAPTER 4
+TIMELINE AND FUTURE WORK
+In conclusion, we return to the questions posed in Chapter 1 focusing on those that my PhD
+will address. We summarize progress so far, and outline future work. We summarize an
+additional project not included in the proposal, note publications and presentations to date,
+and present a timeline of anticipated milestones.
+4.1
+
+Work to date and future work
+• How accurately do cosmological simulations represent the CGM around
+galaxies of different masses and in the reshift range 0 < z < 4?
+So far, I have obtained spectra on random LOSs for two redshift bins for each of the
+Sherwood (for each physics) and IllustrisTNG simulations. At low redshift, out of
+16,000 LOSs/ box, all have been fitted using VPFIT to obtain the column density and
+linewidth of the absorbers. I will obtain spectra on random LOSs for at least three
+additional redshift bins per Sherwood physics, and for IllustrisTNG-100, and carry out
+profile fitting analysis.
+My Co-advisor Dr. Kim is analyzing new spectroscopic data, making a larger observational sample with more absorbers at CGM column densities. We will then statistically
+compare the properties of absorbers seen in simulations with those seen in the universe.
+• What is the impact of feedback processes on the properties of the CGM,
+and how do these effects vary across different galaxy populations?
+I have obtained examples of targeted spectra on LOSs at specific impact parameters
+around around halos, and fit absorption profiles.
+As a function of impact parameter and halo mass bin, I will obtain and fit samples of
+targeted spectra - of order 1000 per box, to be determined. This will be carried out
+for the two current redshifts under consideration and at least three additional ones as
+outlined in the point above.
+This will allow a detailed comparison of line profiles as a function of galaxy mass,
+impact parameter and implemented subgrid physics.
+• Is it possible to quantify the effect of feedback processes on the turbulence
+and ionization state of the CGM gas?
+To look at the effect of turbulence, we need to compute the non-thermal velocities
+in the gas clouds. To imitate observations, where turbulence is computed using eq.
+2.20 by comparing the line-width of two different species in the same gas cloud, I
+will calculate metal abundance in the Sherwood simulations. I will then extract metal
+absorption lines similar to HI absorption lines and calculate bnon−thermal from comparing
+39
+
+HI and absorption lines. This analysis will then be compared to similar analysis in
+observations.
+• How big is the extent of the CGM around galaxies and how does it evolve
+with redshift?
+Once we detect a CGM Tmin -ρ cutoff relation, we will try different fitting algorithms
+similar to Rudie et al. (2012) to fit the cutoff relation. We plan to come up of our
+own algorithm if none of the already existing ones work. Using both Tmin -ρ relation
+in the IGM and the CGM we will define a turnover point in the the T-ρ plane which
+will effectively define the extent of CGM. We will also investigate how the CGM size
+evolves with time by doing the same analysis at different redshifts.
+
+4.2
+
+Application of Machine Learning
+
+In collaboration with Sujin Hwang (CS) we are training Machine Learning (ML) models
+using the synthetic spectra obtained from cosmological simulations. The goal of this project
+is to identify the cosmological simulations (with implemented physics) that best agree with
+observed spectra, and to better understand degeneracies between different subgrid physics.
+This project is in the early stages, exploring data compression and preparation methods and
+identifying the best architectures for our purposes.
+
+4.3
+
+Additional Project: Cluster Mergers
+
+I have worked with Dr. Sharon Felix and undergraduates Kate Shavelle (U. Columbia,
+now Princeton) and Brandon Sike (UTD, now U. Michigan) on a project related to cluster
+merger simulations (Felix et al., 2024). We modeled JKCS041, one of the most distant
+galaxy clusters in the Universe for which resolved X-ray and SZ measurements are available.
+This necessitated a cluster merger scenario in an ideal (isolated) simulation using GAMER2 (Schive et al., 2018). We plan to extend such work on cluster mergers to cosmological
+simulations, where clusters have realistic shapes, substructure and surrounding large scale
+structure. We have recently acquired access to the TNG-Cluster simulation which is a large
+scale 1 Gpc3 extension of the IllustrisTNG suite (Nelson et al., 2024). With Kate Brown
+and Nicolas Mazziotti (NSF REU students in summer 2024 at UTD and Maria Mitchell
+Observatory, respectively), we have been using the TNG-Cluster data to mine cluster mergers
+and look for systems identical to Abell 2146, which is an interesting system since idealized
+simulations have not reproduced some of the observational features (such as discrepant X-ray
+and lensing masses) (Chadayammuri et al., 2021), and analogues of JKCS041. Also involved
+in this project is UTD undergraduate Lauren Mangu, and Brandon Sike.
+40
+
+4.4
+
+Products during PhD
+
+Publication: Decoding the early Universe: exploring a merger scenario for the high-redshift
+cluster JKCS041 using numerical models
+Sharon Felix, Antareep Gogoi, Kaitlyn Shavelle, Brandon Sike, Lindsay King,
+Stefano Andreon, Urmila Chadayammuri, John ZuHone, Charles Romero
+Monthly Notices of the Royal Astronomical Society, Volume 534, Issue 4, November 2024,
+Pages 3676–3687, https://doi.org/10.1093/mnras/stae2338
+Contribution and skills - Gained skills in performing idealized numerical simulations and
+using Texas Advanced Computing Center. Developed mentoring skills (Kate Shavelle and
+Brandon Sike). Contributed to running and analyzing idealized simulations.
+External Presentations:
+• Spring 2022, TACOS at SMU. fireslide presentation.
+• Spring 2024, Presentation at Astronomical Observatory of Trieste, Italy (hosted by
+SISSA)
+• Spring 2024, Presentation at Nottingham University, UK
+• Presentation at UNT-UTD PAARE astronomy symposium, UNT, Denton
+• Fall 2024, TX-Section APS presentation at SMU
+Public Engagement:
+• Collaborated with ArtSci Lab in UTD ATEC department in the Project ”Sensing Deep
+Space: Pandora’s Cluster”.
+• Collaborated with CADRE Media Lab at San Jose State University to in a data sonification project.
+4.5
+
+Timeline of anticipated milestones
+
+4/2025 - Complete paper on temperature-density relation from simulations
+Spring 2025 - If current training of ML models is successful, brief paper will be written in
+spring 2025
+11/2025 Complete paper on investigating Abell 2146 and JKCS041 using large volume cosmological simulations
+5/2026 Thesis defense
+
+41
+
+REFERENCES
+Bahcall, J. N. and E. E. Salpeter (1965, November). On the Interaction of Radiation from
+Distant Sources with the Intervening Medium. 142, 1677–1680.
+Baldwin, J. A. (1977, June). Luminosity Indicators in the Spectra of Quasi-Stellar Objects.
+214, 679–684.
+Barnes, J. and P. Hut (1986, December). A hierarchical O(N log N) force-calculation algorithm. 324 (6096), 446–449.
+Behroozi, P. S., R. H. Wechsler, and H.-Y. Wu (2013, January). The ROCKSTAR Phasespace Temporal Halo Finder and the Velocity Offsets of Cluster Cores. 762 (2), 109.
+Bolton, J. S., P. Gaikwad, M. G. Haehnelt, T.-S. Kim, F. Nasir, E. Puchwein, M. Viel,
+and B. P. Wakker (2022, March). Limits on non-canonical heating and turbulence in the
+intergalactic medium from the low redshift lyman forest. Monthly Notices of the Royal
+Astronomical Society 513 (1), 864–885.
+Bolton, J. S., E. Puchwein, D. Sijacki, M. G. Haehnelt, T.-S. Kim, A. Meiksin, J. A. Regan, and M. Viel (2017, January). The Sherwood simulation suite: overview and data
+comparisons with the Lyman α forest at redshifts 2 ≤ z ≤ 5. 464 (1), 897–914.
+Carswell, R. F. and J. K. Webb (2014, August). VPFIT: Voigt profile fitting program.
+Astrophysics Source Code Library, record ascl:1408.015.
+Cen, R., J. Miralda-Escudé, J. P. Ostriker, and M. Rauch (1994, December). Gravitational
+Collapse of Small-Scale Structure as the Origin of the Lyman-Alpha Forest. 437, L9.
+Cen, R. and J. P. Ostriker (1999, March). Where Are the Baryons? 514 (1), 1–6.
+Chadayammuri, U., J. ZuHone, P. Nulsen, D. Nagai, S. Felix, F. Andrade-Santos, L. King,
+and H. Russell (2021, October). Constraining merging galaxy clusters with x-ray and
+lensing simulations and observations: the case of abell 2146. Monthly Notices of the Royal
+Astronomical Society 509 (1), 1201–1216.
+Chatzikos, M., S. Bianchi, F. Camilloni, P. Chakraborty, C. M. Gunasekera, F. Guzmán,
+J. S. Milby, A. Sarkar, G. Shaw, P. A. M. van Hoof, and G. J. Ferland (2023). The 2023
+release of cloudy.
+Chen, H., K. M. Lanzetta, J. K. Webb, and X. Barcons (2001, October). The gaseous extent
+of galaxies and the origin of ly absorption systems. v. optical and near-infrared photometry
+of ly-absorbing galaxies atzlt;1. The Astrophysical Journal 559 (2), 654–674.
+42
+
+Croton, D. J., V. Springel, S. D. M. White, G. De Lucia, C. S. Frenk, L. Gao, A. Jenkins,
+G. Kauffmann, J. F. Navarro, and N. Yoshida (2006, January). The many lives of active
+galactic nuclei: cooling flows, black holes and the luminosities and colours of galaxies.
+365 (1), 11–28.
+Davé, R., B. D. Oppenheimer, N. Katz, J. A. Kollmeier, and D. H. Weinberg (2010, November). The intergalactic medium over the last 10 billion years - I. Lyα absorption and
+physical conditions. 408 (4), 2051–2070.
+Demtröder, W. (2008). Laser Spectroscopy: Vol. 1: Basic Principles. Laser Spectroscopy.
+Springer Berlin Heidelberg.
+Efstathiou, G., M. Davis, S. D. M. White, and C. S. Frenk (1985, February). Numerical
+techniques for large cosmological N-body simulations. 57, 241–260.
+Faucher-Giguere, C.-A. and S. P. Oh (2023). Key physical processes in the circumgalactic
+medium.
+Felix, S., A. Gogoi, K. Shavelle, B. Sike, L. King, S. Andreon, U. Chadayammuri, J. ZuHone,
+and C. Romero (2024, November). Decoding the early Universe: exploring a merger
+scenario for the high-redshift cluster JKCS041 using numerical models. 534 (4), 3676–
+3687.
+Gallo, E., R. P. Fender, and G. G. Pooley (2003, September). A universal radio-X-ray
+correlation in low/hard state black hole binaries. 344 (1), 60–72.
+Gingold, R. A. and J. J. Monaghan (1977, November). Smoothed particle hydrodynamics:
+theory and application to non-spherical stars. 181, 375–389.
+Gunn, J. E. and B. A. Peterson (1965, November). On the Density of Neutral Hydrogen in
+Intergalactic Space. 142, 1633–1636.
+Haardt, F. and P. Madau (2012, February). Radiative Transfer in a Clumpy Universe. IV.
+New Synthesis Models of the Cosmic UV/X-Ray Background. 746 (2), 125.
+Hernquist, L., N. Katz, D. H. Weinberg, and J. Miralda-Escude (1996). The Lyman alpha
+forest in the cold dark matter model. Astrophys. J. Lett. 457, L51.
+Hiss, H., M. Walther, J. F. Hennawi, J. Oñorbe, J. M. O’Meara, A. Rorai, and Z. Lukić
+(2018, September). A new measurement of the temperature–density relation of the igm
+from voigt profile fitting. The Astrophysical Journal 865 (1), 42.
+Hjerting, F. (1938, November). Tables Facilitating the Calculation of Line Absorption Coefficients. 88, 508.
+43
+
+Hu, E. M., T.-S. Kim, L. L. Cowie, A. Songaila, and M. Rauch (1995, October). The
+distribution of column densities and b values in the lyman-alpha forest. The Astronomical
+Journal 110, 1526.
+Hu, W. and S. Dodelson (2002). Cosmic Microwave Background Anisotropies. Ann. Rev.
+Astron. Astrophys. 40, 171–216.
+Hui, L. and N. Y. Gnedin (1997, November). Equation of state of the photoionized intergalactic medium. 292 (1), 27–42.
+Kennicutt, Robert C., J. (1998, May). The Global Schmidt Law in Star-forming Galaxies.
+498 (2), 541–552.
+Kim, T. S., J. S. Bolton, M. Viel, M. G. Haehnelt, and R. F. Carswell (2007, December).
+An improved measurement of the flux distribution of the Lyα forest in QSO absorption
+spectra: the effect of continuum fitting, metal contamination and noise properties. 382 (4),
+1657–1674.
+Kim, T.-S., E. M. Hu, L. L. Cowie, and A. Songaila (1997, July). The Redshift Evolution
+of the Ly alpha Forest. 114, 1–13.
+Lanzetta, K. M., D. V. Bowen, D. Tytler, and J. K. Webb (1995, April). The Gaseous Extent
+of Galaxies and the Origin of Lyman-Alpha Absorption Systems: A Survey of Galaxies in
+the Fields of Hubble Space Telescope Spectroscopic Target QSOs. 442, 538.
+Lewis, A., A. Challinor, and A. Lasenby (2000, August). Efficient Computation of Cosmic Microwave Background Anisotropies in Closed Friedmann-Robertson-Walker Models.
+538 (2), 473–476.
+Lucy, L. B. (1977, December). A numerical approach to the testing of the fission hypothesis.
+82, 1013–1024.
+Lynds, R. (1971, March). The Absorption-Line Spectrum of 4c 05.34. 164, L73.
+Martizzi, D., M. Vogelsberger, M. C. Artale, M. Haider, P. Torrey, F. Marinacci, D. Nelson, A. Pillepich, R. Weinberger, L. Hernquist, J. Naiman, and V. Springel (2019, July).
+Baryons in the Cosmic Web of IllustrisTNG - I: gas in knots, filaments, sheets, and voids.
+486 (3), 3766–3787.
+Münch, G. and H. Zirin (1961, January). Interstellar Matter at Large Distances from the
+Galactic Plane. 133, 11.
+Murphy, M. T., G. G. Kacprzak, G. A. D. Savorgnan, and R. F. Carswell (2019). The uves
+spectral quasar absorption database (squad) data release 1: the first 10 million seconds.
+MNRAS 482, 3458.
+44
+
+Nelson, D., A. Pillepich, M. Ayromlou, W. Lee, K. Lehle, E. Rohr, and N. Truong (2024).
+Introducing the tng-cluster simulation: overview and physical properties of the gaseous
+intracluster medium.
+O’Meara, J. M., N. Lehner, J. C. Howk, J. X. Prochaska, A. J. Fox, M. A. Swain, C. R.
+Gelino, G. B. Berriman, and H. Tran (2015, October). The First Data Release of the
+KODIAQ Survey. 150 (4), 111.
+Peebles, P. J. E. (1980). The large-scale structure of the universe.
+Peeples, M., J. Tumlinson, A. Fox, A. Aloisi, S. Fleming, R. Jedrzejewski, C. Oliveira,
+T. Ayres, C. Danforth, B. Keeney, and E. Jenkins (2017, April). The Hubble Spectroscopic
+Legacy Archive. Instrument Science Report COS 2017-4, 8 pages.
+Peeples, M. S., D. H. Weinberg, R. Davé, M. A. Fardal, and N. Katz (2010, May). Pressure
+support versus thermal broadening in the Lyman α forest - I. Effects of the equation of
+state on longitudinal structure. 404 (3), 1281–1294.
+Penzias, A. A. and R. W. Wilson (1965, July). A Measurement of Excess Antenna Temperature at 4080 Mc/s. 142, 419–421.
+Pillepich, A., V. Springel, D. Nelson, S. Genel, J. Naiman, R. Pakmor, L. Hernquist, P. Torrey, M. Vogelsberger, R. Weinberger, and F. Marinacci (2017, October). Simulating galaxy
+formation with the illustristng model. Monthly Notices of the Royal Astronomical Society 473 (3), 4077–4106.
+Planck Collaboration, P. A. R. Ade, N. Aghanim, C. Armitage-Caplan, M. Arnaud, M. Ashdown, F. Atrio-Barandela, J. Aumont, C. Baccigalupi, A. J. Banday, R. B. Barreiro,
+J. G. Bartlett, E. Battaner, K. Benabed, A. Benoı̂t, A. Benoit-Lévy, J. P. Bernard,
+M. Bersanelli, P. Bielewicz, J. Bobin, J. J. Bock, A. Bonaldi, J. R. Bond, J. Borrill,
+F. R. Bouchet, M. Bridges, M. Bucher, C. Burigana, R. C. Butler, E. Calabrese, B. Cappellini, J. F. Cardoso, A. Catalano, A. Challinor, A. Chamballu, R. R. Chary, X. Chen,
+H. C. Chiang, L. Y. Chiang, P. R. Christensen, S. Church, D. L. Clements, S. Colombi,
+L. P. L. Colombo, F. Couchot, A. Coulais, B. P. Crill, A. Curto, F. Cuttaia, L. Danese,
+R. D. Davies, R. J. Davis, P. de Bernardis, A. de Rosa, G. de Zotti, J. Delabrouille,
+J. M. Delouis, F. X. Désert, C. Dickinson, J. M. Diego, K. Dolag, H. Dole, S. Donzelli,
+O. Doré, M. Douspis, J. Dunkley, X. Dupac, G. Efstathiou, F. Elsner, T. A. Enßlin,
+H. K. Eriksen, F. Finelli, O. Forni, M. Frailis, A. A. Fraisse, E. Franceschi, T. C. Gaier,
+S. Galeotta, S. Galli, K. Ganga, M. Giard, G. Giardino, Y. Giraud-Héraud, E. Gjerløw,
+J. González-Nuevo, K. M. Górski, S. Gratton, A. Gregorio, A. Gruppuso, J. E. Gudmundsson, J. Haissinski, J. Hamann, F. K. Hansen, D. Hanson, D. Harrison, S. HenrotVersillé, C. Hernández-Monteagudo, D. Herranz, S. R. Hildebrandt, E. Hivon, M. Hobson, W. A. Holmes, A. Hornstrup, Z. Hou, W. Hovest, K. M. Huffenberger, A. H. Jaffe,
+T. R. Jaffe, J. Jewell, W. C. Jones, M. Juvela, E. Keihänen, R. Keskitalo, T. S. Kisner,
+45
+
+R. Kneissl, J. Knoche, L. Knox, M. Kunz, H. Kurki-Suonio, G. Lagache, A. Lähteenmäki,
+J. M. Lamarre, A. Lasenby, M. Lattanzi, R. J. Laureijs, C. R. Lawrence, S. Leach,
+J. P. Leahy, R. Leonardi, J. León-Tavares, J. Lesgourgues, A. Lewis, M. Liguori, P. B.
+Lilje, M. Linden-Vørnle, M. López-Caniego, P. M. Lubin, J. F. Macı́as-Pérez, B. Maffei,
+D. Maino, N. Mandolesi, M. Maris, D. J. Marshall, P. G. Martin, E. Martı́nez-González,
+S. Masi, M. Massardi, S. Matarrese, F. Matthai, P. Mazzotta, P. R. Meinhold, A. Melchiorri, J. B. Melin, L. Mendes, E. Menegoni, A. Mennella, M. Migliaccio, M. Millea, S. Mitra, M. A. Miville-Deschênes, A. Moneti, L. Montier, G. Morgante, D. Mortlock, A. Moss,
+D. Munshi, J. A. Murphy, P. Naselsky, F. Nati, P. Natoli, C. B. Netterfield, H. U. NørgaardNielsen, F. Noviello, D. Novikov, I. Novikov, I. J. O’Dwyer, S. Osborne, C. A. Oxborrow,
+F. Paci, L. Pagano, F. Pajot, R. Paladini, D. Paoletti, B. Partridge, F. Pasian, G. Patanchon, D. Pearson, T. J. Pearson, H. V. Peiris, O. Perdereau, L. Perotto, F. Perrotta,
+V. Pettorino, F. Piacentini, M. Piat, E. Pierpaoli, D. Pietrobon, S. Plaszczynski, P. Platania, E. Pointecouteau, G. Polenta, N. Ponthieu, L. Popa, T. Poutanen, G. W. Pratt,
+G. Prézeau, S. Prunet, J. L. Puget, J. P. Rachen, W. T. Reach, R. Rebolo, M. Reinecke,
+M. Remazeilles, C. Renault, S. Ricciardi, T. Riller, I. Ristorcelli, G. Rocha, C. Rosset,
+G. Roudier, M. Rowan-Robinson, J. A. Rubiño-Martı́n, B. Rusholme, M. Sandri, D. Santos, M. Savelainen, G. Savini, D. Scott, M. D. Seiffert, E. P. S. Shellard, L. D. Spencer,
+J. L. Starck, V. Stolyarov, R. Stompor, R. Sudiwala, R. Sunyaev, F. Sureau, D. Sutton,
+A. S. Suur-Uski, J. F. Sygnet, J. A. Tauber, D. Tavagnacco, L. Terenzi, L. Toffolatti,
+M. Tomasi, M. Tristram, M. Tucci, J. Tuovinen, M. Türler, G. Umana, L. Valenziano,
+J. Valiviita, B. Van Tent, P. Vielva, F. Villa, N. Vittorio, L. A. Wade, B. D. Wandelt,
+I. K. Wehus, M. White, S. D. M. White, A. Wilkinson, D. Yvon, A. Zacchei, and A. Zonca
+(2014, November). Planck 2013 results. XVI. Cosmological parameters. 571, A16.
+Planck Collaboration, P. A. R. Ade, N. Aghanim, M. Arnaud, M. Ashdown, J. Aumont,
+C. Baccigalupi, A. J. Banday, R. B. Barreiro, J. G. Bartlett, N. Bartolo, E. Battaner, R. Battye, K. Benabed, A. Benoı̂t, A. Benoit-Lévy, J. P. Bernard, M. Bersanelli,
+P. Bielewicz, J. J. Bock, A. Bonaldi, L. Bonavera, J. R. Bond, J. Borrill, F. R. Bouchet,
+F. Boulanger, M. Bucher, C. Burigana, R. C. Butler, E. Calabrese, J. F. Cardoso, A. Catalano, A. Challinor, A. Chamballu, R. R. Chary, H. C. Chiang, J. Chluba, P. R. Christensen, S. Church, D. L. Clements, S. Colombi, L. P. L. Colombo, C. Combet, A. Coulais,
+B. P. Crill, A. Curto, F. Cuttaia, L. Danese, R. D. Davies, R. J. Davis, P. de Bernardis,
+A. de Rosa, G. de Zotti, J. Delabrouille, F. X. Désert, E. Di Valentino, C. Dickinson,
+J. M. Diego, K. Dolag, H. Dole, S. Donzelli, O. Doré, M. Douspis, A. Ducout, J. Dunkley,
+X. Dupac, G. Efstathiou, F. Elsner, T. A. Enßlin, H. K. Eriksen, M. Farhang, J. Fergusson,
+F. Finelli, O. Forni, M. Frailis, A. A. Fraisse, E. Franceschi, A. Frejsel, S. Galeotta, S. Galli,
+K. Ganga, C. Gauthier, M. Gerbino, T. Ghosh, M. Giard, Y. Giraud-Héraud, E. Giusarma,
+E. Gjerløw, J. González-Nuevo, K. M. Górski, S. Gratton, A. Gregorio, A. Gruppuso, J. E.
+Gudmundsson, J. Hamann, F. K. Hansen, D. Hanson, D. L. Harrison, G. Helou, S. HenrotVersillé, C. Hernández-Monteagudo, D. Herranz, S. R. Hildebrandt, E. Hivon, M. Hobson,
+W. A. Holmes, A. Hornstrup, W. Hovest, Z. Huang, K. M. Huffenberger, G. Hurier, A. H.
+46
+
+Jaffe, T. R. Jaffe, W. C. Jones, M. Juvela, E. Keihänen, R. Keskitalo, T. S. Kisner,
+R. Kneissl, J. Knoche, L. Knox, M. Kunz, H. Kurki-Suonio, G. Lagache, A. Lähteenmäki,
+J. M. Lamarre, A. Lasenby, M. Lattanzi, C. R. Lawrence, J. P. Leahy, R. Leonardi,
+J. Lesgourgues, F. Levrier, A. Lewis, M. Liguori, P. B. Lilje, M. Linden-Vørnle, M. LópezCaniego, P. M. Lubin, J. F. Macı́as-Pérez, G. Maggio, D. Maino, N. Mandolesi, A. Mangilli,
+A. Marchini, M. Maris, P. G. Martin, M. Martinelli, E. Martı́nez-González, S. Masi,
+S. Matarrese, P. McGehee, P. R. Meinhold, A. Melchiorri, J. B. Melin, L. Mendes, A. Mennella, M. Migliaccio, M. Millea, S. Mitra, M. A. Miville-Deschênes, A. Moneti, L. Montier,
+G. Morgante, D. Mortlock, A. Moss, D. Munshi, J. A. Murphy, P. Naselsky, F. Nati, P. Natoli, C. B. Netterfield, H. U. Nørgaard-Nielsen, F. Noviello, D. Novikov, I. Novikov, C. A.
+Oxborrow, F. Paci, L. Pagano, F. Pajot, R. Paladini, D. Paoletti, B. Partridge, F. Pasian,
+G. Patanchon, T. J. Pearson, O. Perdereau, L. Perotto, F. Perrotta, V. Pettorino, F. Piacentini, M. Piat, E. Pierpaoli, D. Pietrobon, S. Plaszczynski, E. Pointecouteau, G. Polenta, L. Popa, G. W. Pratt, G. Prézeau, S. Prunet, J. L. Puget, J. P. Rachen, W. T.
+Reach, R. Rebolo, M. Reinecke, M. Remazeilles, C. Renault, A. Renzi, I. Ristorcelli,
+G. Rocha, C. Rosset, M. Rossetti, G. Roudier, B. Rouillé d’Orfeuil, M. Rowan-Robinson,
+J. A. Rubiño-Martı́n, B. Rusholme, N. Said, V. Salvatelli, L. Salvati, M. Sandri, D. Santos, M. Savelainen, G. Savini, D. Scott, M. D. Seiffert, P. Serra, E. P. S. Shellard, L. D.
+Spencer, M. Spinelli, V. Stolyarov, R. Stompor, R. Sudiwala, R. Sunyaev, D. Sutton, A. S.
+Suur-Uski, J. F. Sygnet, J. A. Tauber, L. Terenzi, L. Toffolatti, M. Tomasi, M. Tristram,
+T. Trombetti, M. Tucci, J. Tuovinen, M. Türler, G. Umana, L. Valenziano, J. Valiviita,
+F. Van Tent, P. Vielva, F. Villa, L. A. Wade, B. D. Wandelt, I. K. Wehus, M. White,
+S. D. M. White, A. Wilkinson, D. Yvon, A. Zacchei, and A. Zonca (2016, September).
+Planck 2015 results. XIII. Cosmological parameters. 594, A13.
+Press, W. H. and P. Schechter (1974, February). Formation of Galaxies and Clusters of
+Galaxies by Self-Similar Gravitational Condensation. 187, 425–438.
+Puchwein, E., J. S. Bolton, L. C. Keating, M. Molaro, P. Gaikwad, G. Kulkarni, M. G.
+Haehnelt, V. Iršič, T. Šoltinský, M. Viel, D. Aubert, G. D. Becker, and A. Meiksin (2022,
+December). The sherwood–relics simulations: overview and impact of patchy reionization and pressure smoothing on the intergalactic medium. Monthly Notices of the Royal
+Astronomical Society 519 (4), 6162–6183.
+Puchwein, E. and V. Springel (2013, February). Shaping the galaxy stellar mass function
+with supernova- and AGN-driven winds. 428 (4), 2966–2979.
+Rees, M. J. (1998). (NAS Colloquium) The Age of the Universe, Dark Matter, and Structure
+Formation. Washington, DC: The National Academies Press.
+Rudie, G. C., C. C. Steidel, and M. Pettini (2012, October). The Temperature-Density
+Relation in the Intergalactic Medium at Redshift langzrang = 2.4. 757 (2), L30.
+47
+
+Rudie, G. C., C. C. Steidel, and M. Pettini (2012, September). The temperature-density relation in the intergalactic medium at redshift 〈 z 〉 = 2.4. The Astrophysical Journal 757 (2),
+L30.
+Sargent, W. L. W., P. J. Young, A. Boksenberg, and D. Tytler (1980, January). The
+distribution of Lyman-alpha absorption lines in the spectra of six QSOs: evidence for an
+intergalactic origin. 42, 41–81.
+Schaye, J., T. Theuns, M. Rauch, G. Efstathiou, and W. L. W. Sargent (2000, November).
+The thermal history of the intergalactic medium∗ . 318 (3), 817–826.
+Schive, H.-Y., J. A. ZuHone, N. J. Goldbaum, M. J. Turk, M. Gaspari, and C.-Y. Cheng
+(2018, December). GAMER-2: a GPU-accelerated adaptive mesh refinement code - accuracy, performance, and scalability. 481 (4), 4815–4840.
+Schmidt, M. (1965, April). Large Redshifts of Five Quasi-Stellar Sources. 141, 1295.
+Sijacki, D., V. Springel, T. Di Matteo, and L. Hernquist (2007, August). A unified model
+for agn feedback in cosmological simulations of structure formation: Agn feedback in
+cosmological simulations. Monthly Notices of the Royal Astronomical Society 380 (3),
+877–900.
+Spitzer, Lyman, J. (1956, July). On a Possible Interstellar Galactic Corona. 124, 20.
+Springel, V. (2005, December). The cosmological simulation code gadget-2. Monthly Notices
+of the Royal Astronomical Society 364 (4), 1105–1134.
+Springel, V. and L. Hernquist (2003, February). Cosmological smoothed particle hydrodynamics simulations: a hybrid multiphase model for star formation. 339 (2), 289–311.
+Springel, V., R. Pakmor, A. Pillepich, R. Weinberger, D. Nelson, L. Hernquist, M. Vogelsberger, S. Genel, P. Torrey, F. Marinacci, and J. Naiman (2018, March). First results from
+the IllustrisTNG simulations: matter and galaxy clustering. 475 (1), 676–698.
+Springel, V., S. D. M. White, G. Tormen, and G. Kauffmann (2001, December). Populating
+a cluster of galaxies - I. Results at z=0. 328 (3), 726–750.
+Steidel, C. C., D. K. Erb, A. E. Shapley, M. Pettini, N. Reddy, M. Bogosavljević, G. C.
+Rudie, and O. Rakic (2010, July). The Structure and Kinematics of the Circumgalactic
+Medium from Far-ultraviolet Spectra of z ˜= 2-3 Galaxies. 717 (1), 289–322.
+Theuns, T., A. Leonard, G. Efstathiou, F. R. Pearce, and P. A. Thomas (1998, December).
+P3̂M-SPH simulations of the Lyalpha forest. 301 (2), 478–502.
+48
+
+Tumlinson, J., M. S. Peeples, and J. K. Werk (2017, August). The circumgalactic medium.
+Annual Review of Astronomy and Astrophysics 55 (1), 389–432.
+Vogelsberger, M., S. Genel, D. Sijacki, P. Torrey, V. Springel, and L. Hernquist (2013,
+December). A model for cosmological simulations of galaxy formation physics. 436 (4),
+3031–3067.
+Vogelsberger, M., S. Genel, V. Springel, P. Torrey, D. Sijacki, D. Xu, G. Snyder, D. Nelson, and L. Hernquist (2014, October). Introducing the Illustris Project: simulating the
+coevolution of dark and visible matter in the Universe. 444 (2), 1518–1547.
+Vogt, S. S., S. L. Allen, B. C. Bigelow, L. Bresee, B. Brown, T. Cantrall, A. Conrad,
+M. Couture, C. Delaney, H. W. Epps, D. Hilyard, D. F. Hilyard, E. Horn, N. Jern,
+D. Kanto, M. J. Keane, R. I. Kibrick, J. W. Lewis, J. Osborne, G. H. Pardeilhan, T. Pfister,
+T. Ricketts, L. B. Robinson, R. J. Stover, D. Tucker, J. Ward, and M. Z. Wei (1994, June).
+HIRES: the high-resolution echelle spectrometer on the Keck 10-m Telescope. In D. L.
+Crawford and E. R. Craine (Eds.), Instrumentation in Astronomy VIII, Volume 2198 of
+Society of Photo-Optical Instrumentation Engineers (SPIE) Conference Series, pp. 362.
+Weinberger, R., V. Springel, L. Hernquist, A. Pillepich, F. Marinacci, R. Pakmor, D. Nelson,
+S. Genel, M. Vogelsberger, J. Naiman, and P. Torrey (2017, March). Simulating galaxy
+formation with black hole driven thermal and kinetic feedback. 465 (3), 3291–3308.
+Weinberger, R., V. Springel, and R. Pakmor (2020, June). The arepo public code release.
+The Astrophysical Journal Supplement Series 248 (2), 32.
+
+49
+
+
