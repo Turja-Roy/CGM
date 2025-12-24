@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-# Project root directory (go up one level from scripts/)
+# Project root directory
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 
 # Data directories
@@ -178,9 +178,9 @@ def list_all_available_data():
     print("=" * 70)
 
 
-# ============================================================================
-# DEFAULT ANALYSIS PARAMETERS
-# ============================================================================
+# =========================== #
+# DEFAULT ANALYSIS PARAMETERS #
+# =========================== #
 
 # Spectra generation parameters
 DEFAULT_NUM_SIGHTLINES = 100        # Number of random sightlines

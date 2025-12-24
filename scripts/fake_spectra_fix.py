@@ -2,16 +2,9 @@ import numpy as np
 
 
 def apply_fake_spectra_bugfixes():
-    """
-    Apply bugfixes for fake_spectra to work with Python 3.13.
-    
-    Fixes:
-    1. uint32 overflow in get_npart calculation
-    2. float32/float64 type mismatches in C extension
-    
-    Returns:
-        bool: True if bugfixes applied successfully, False if fake_spectra not installed
-    """
+    # Fixes:
+    # 1. uint32 overflow in get_npart calculation
+    # 2. float32/float64 type mismatches in C extension
     try:
         from fake_spectra import abstractsnapshot
         from fake_spectra import spectra

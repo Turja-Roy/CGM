@@ -1,4 +1,3 @@
-# Convenience imports for all commands
 from .list_explore import cmd_list, cmd_explore
 from .generate import cmd_generate
 from .analyze import cmd_analyze

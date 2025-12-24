@@ -1,10 +1,3 @@
-"""
-Simulation comparison and redshift evolution tracking.
-
-Functions for loading spectra results, comparing multiple simulations,
-and tracking how observables evolve with redshift.
-"""
-
 import numpy as np
 import h5py
 import matplotlib.pyplot as plt
@@ -20,33 +13,6 @@ from .plotting import save_plot
 
 
 def load_spectra_results(spectra_file, velocity_spacing=0.1):
-    """
-    Load and compute all analysis results from a spectra file.
-    
-    Parameters
-    ----------
-    spectra_file : str or Path
-        Path to HDF5 spectra file
-    velocity_spacing : float
-        Velocity spacing in km/s (default: 0.1)
-    
-    Returns
-    -------
-    results : dict
-        Dictionary containing all analysis results:
-        - 'success': bool
-        - 'filepath': str
-        - 'redshift': float
-        - 'n_sightlines': int
-        - 'n_pixels': int
-        - 'flux_stats': dict
-        - 'tau_eff': dict
-        - 'power_spectrum': dict
-        - 'cddf': dict
-        - 'line_widths': dict or None
-        - 'temp_density': dict or None
-        - 'error': str (if failed)
-    """
     results = {
         'filepath': str(spectra_file),
         'success': False,
@@ -128,26 +94,6 @@ def load_spectra_results(spectra_file, velocity_spacing=0.1):
 
 
 def compare_simulations(spectra_files, labels=None, output_path=None):
-    """
-    Compare results from multiple simulation runs.
-    
-    Parameters
-    ----------
-    spectra_files : list of str
-        List of paths to spectra HDF5 files
-    labels : list of str, optional
-        Labels for each simulation (default: "Sim 0", "Sim 1", ...)
-    output_path : str or Path, optional
-        Where to save comparison plot
-    
-    Returns
-    -------
-    comparison : dict
-        Dictionary containing comparison results:
-        - 'n_simulations': int
-        - 'labels': list of str
-        - 'results': list of dicts (all loaded results)
-    """
     if labels is None:
         labels = [f"Sim {i}" for i in range(len(spectra_files))]
     
@@ -323,33 +269,6 @@ def compare_simulations(spectra_files, labels=None, output_path=None):
 
 
 def track_redshift_evolution(spectra_files, labels=None, output_path=None):
-    """
-    Track how observables evolve with redshift across multiple snapshots.
-    
-    Parameters
-    ----------
-    spectra_files : list of str
-        List of paths to spectra HDF5 files (from different redshifts)
-    labels : list of str, optional
-        Labels for each snapshot (default: "Snap 0", "Snap 1", ...)
-    output_path : str or Path, optional
-        Where to save evolution plot
-    
-    Returns
-    -------
-    evolution : dict
-        Dictionary containing evolution results:
-        - 'n_snapshots': int
-        - 'redshift_range': tuple (z_min, z_max)
-        - 'redshifts': list
-        - 'tau_eff': list
-        - 'mean_flux': list
-        - 'n_absorbers': list
-        - 'T0': list (if available)
-        - 'gamma': list (if available)
-        - 'z_with_T': list (if available)
-        - 'results': list of dicts
-    """
     if labels is None:
         labels = [f"Snap {i}" for i in range(len(spectra_files))]
     
