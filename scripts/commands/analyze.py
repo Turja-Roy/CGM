@@ -136,9 +136,9 @@ def cmd_analyze(args):
     print(format_stats_table(stats))
 
     # [2/8] Effective optical depth
-    print("\n[2/8] Computing effective optical depth τ_eff...")
+    print("\n[2/8] Computing effective optical depth tau_eff...")
     tau_eff_dict = compute_effective_optical_depth(tau)
-    print(f"τ_eff = {tau_eff_dict['tau_eff']:.4f} ± {
+    print(f"tau_eff = {tau_eff_dict['tau_eff']:.4f} ± {
           tau_eff_dict['tau_eff_err']:.4f}")
     print(f"Mean transmitted flux <F> = {tau_eff_dict['mean_flux']:.4f}")
 
@@ -450,7 +450,7 @@ def cmd_analyze(args):
 
         ax.scatter(transmitted_frac, saturated_frac, alpha=0.5, s=20)
         ax.set_xlabel('Fraction with F > 0.1')
-        ax.set_ylabel('Fraction with τ > 5 (saturated)')
+        ax.set_ylabel('Fraction with tau > 5 (saturated)')
         ax.set_title('Transmission vs Saturation')
         ax.grid(True, alpha=0.3)
 
@@ -535,7 +535,7 @@ def cmd_analyze(args):
     print(f"{'=' * 70}")
     print(f"\nKey Results:")
     print(f"Mean flux <F>:           {tau_eff_dict['mean_flux']:.4f}")
-    print(f"Effective tau τ_eff:     {tau_eff_dict['tau_eff']:.4f} ± {
+    print(f"Effective tau tau_eff:     {tau_eff_dict['tau_eff']:.4f} ± {
           tau_eff_dict['tau_eff_err']:.4f}")
     print(f"Number of absorbers:     {cddf_dict['n_absorbers']}")
     if not np.isnan(cddf_dict['beta_fit']):
@@ -548,8 +548,8 @@ def cmd_analyze(args):
         print(f"Implied temperature:     {T_mean/1e3:.0f} × 10³ K")
 
     if tdens_dict is not None and np.isfinite(tdens_dict['T0']):
-        print(f"T₀ (at mean density):    {tdens_dict['T0']:.0f} K")
-        print(f"γ (polytropic index):    {tdens_dict['gamma']:.3f}")
+        print(f"T_0 (at mean density):    {tdens_dict['T0']:.0f} K")
+        print(f"gamma (polytropic index):    {tdens_dict['gamma']:.3f}")
 
     if len(metal_line_stats) > 1:
         print(

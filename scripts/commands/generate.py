@@ -6,6 +6,7 @@ import scripts.config as config
 from scripts.hdf5_io import load_snapshot_metadata
 from scripts.fake_spectra_fix import apply_fake_spectra_bugfixes
 
+
 # Generate Lyman-alpha (or other) spectra from simulation snapshot
 def cmd_generate(args):
     snapshot_file = args.snapshot

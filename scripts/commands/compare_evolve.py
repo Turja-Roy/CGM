@@ -1,5 +1,7 @@
 import scripts.config as config
 from scripts.comparison import compare_simulations, track_redshift_evolution
+
+
 # Compare multiple simulations
 def cmd_compare(args):
     print("=" * 70)
@@ -37,7 +39,7 @@ def cmd_compare(args):
         for i, label in enumerate(comparison['labels']):
             res = comparison['results'][i]
             print(f"[{i+1}] {label}: z={res['redshift']:.3f}, "
-                f"τ_eff={res['tau_eff']['tau_eff']:.4f}, "
+                f"tau_eff={res['tau_eff']['tau_eff']:.4f}, "
                 f"<F>={res['flux_stats']['mean_flux']:.4f}")
 
         print(f"\nComparison plot: {output_path}")
@@ -95,7 +97,7 @@ def cmd_evolve(args):
         # Show trend in mean flux
         flux_start, flux_end = evolution['mean_flux'][0], evolution['mean_flux'][-1]
         flux_change = ((flux_end - flux_start) / flux_start) * 100
-        print(f"<F>:   {flux_start:.4f} → {
+        print(f"<F>:   {flux_start:.4f} -> {
               flux_end:.4f} ({flux_change:+.1f}%)")
 
         # Show T-ρ trends if available

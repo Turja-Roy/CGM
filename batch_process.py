@@ -159,9 +159,9 @@ def batch_generate(snapshot_dir, num_sightlines=10000, lines='lya', max_workers=
                 results.append(result)
 
                 if result['status'] == 'success':
-                    print(f"  ✓ Success ({result['elapsed_time']:.1f}s)")
+                    print(f"  OK Success ({result['elapsed_time']:.1f}s)")
                 else:
-                    print(f"  ✗ {result['status'].capitalize()}")
+                    print(f"  Failed {result['status'].capitalize()}")
 
     return results
 
@@ -208,9 +208,9 @@ def batch_analyze(spectra_dir, line=None, max_workers=1):
                 results.append(result)
 
                 if result['status'] == 'success':
-                    print(f"  ✓ Success ({result['elapsed_time']:.1f}s)")
+                    print(f"  OK Success ({result['elapsed_time']:.1f}s)")
                 else:
-                    print(f"  ✗ {result['status'].capitalize()}")
+                    print(f"  Failed {result['status'].capitalize()}")
 
     return results
 

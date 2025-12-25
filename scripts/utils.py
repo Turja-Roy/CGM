@@ -729,7 +729,7 @@ def plot_multi_line_comparison(line_stats_list, redshift, output_path, title=Non
                   edgecolor='black', alpha=0.7)
     ax.set_xticks(range(n_ions))
     ax.set_xticklabels(ion_names, rotation=45, ha='right')
-    ax.set_ylabel('Mean τ (absorbing regions)', fontsize=12)
+    ax.set_ylabel('Mean tau (absorbing regions)', fontsize=12)
     ax.set_title('Absorption Strength', fontsize=13, fontweight='bold')
     ax.grid(True, alpha=0.3, axis='y')
 
@@ -740,7 +740,7 @@ def plot_multi_line_comparison(line_stats_list, redshift, output_path, title=Non
             log_N = np.log10(stats['column_densities'])
             ax.hist(log_N, bins=20, alpha=0.5, label=stats['ion_name'],
                     color=colors[i], edgecolor='black', linewidth=0.5)
-    ax.set_xlabel('log₁₀(N / cm⁻²)', fontsize=12)
+    ax.set_xlabel('log_10(N / cm^-2)', fontsize=12)
     ax.set_ylabel('Count', fontsize=12)
     ax.set_title('Column Density Distributions',
                  fontsize=13, fontweight='bold')
@@ -929,7 +929,7 @@ def plot_line_width_distribution(lwd_dict, redshift, output_path, title=None):
         ax2.fill_between(N_centers, b_16th, b_84th, alpha=0.3, color='red',
                          label='16-84th percentile')
 
-    ax2.set_xlabel('log₁₀(N_HI / cm⁻²)', fontsize=13)
+    ax2.set_xlabel('log_10(N_HI / cm^-2)', fontsize=13)
     ax2.set_ylabel('Doppler b-parameter (km/s)', fontsize=13)
     ax2.set_title(
         f'b-N_HI Correlation (z = {redshift:.2f})', fontsize=14, fontweight='bold')
@@ -992,16 +992,16 @@ def plot_temperature_density_relation(tdens_dict, redshift, output_path, title=N
         rho_range = np.linspace(log_rho.min(), log_rho.max(), 100)
         T_fit = np.log10(T0) + (gamma - 1) * rho_range
         ax.plot(rho_range, T_fit, 'b--', linewidth=3,
-                label=f'T = T₀(ρ/ρ̄)^(γ-1)')
+                label=f'T = T_0(rho/rho_bar)^(gamma-1)')
 
         # Add fit parameters as text
-        fit_text = f'T₀ = {T0:.0f} K\nγ = {gamma:.3f}'
+        fit_text = f'T_0 = {T0:.0f} K\ngamma = {gamma:.3f}'
         ax.text(0.05, 0.95, fit_text, transform=ax.transAxes,
                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
                 fontsize=12, verticalalignment='top', fontweight='bold')
 
-    ax.set_xlabel('log₁₀(ρ/ρ̄)', fontsize=14)
-    ax.set_ylabel('log₁₀(T / K)', fontsize=14)
+    ax.set_xlabel('log_10(rho/rho_bar)', fontsize=14)
+    ax.set_ylabel('log_10(T / K)', fontsize=14)
 
     if title is None:
         title = f'Temperature-Density Relation - Redshift z = {redshift:.2f}'
@@ -1033,9 +1033,9 @@ def format_stats_table(stats):
         f"Median flux:            {stats['median_flux']:.4f}",
         f"Std dev:                {stats['std_flux']:.4f}",
         "",
-        f"Effective τ_eff:        {stats['effective_tau']:.4f}",
-        f"Mean τ:                 {stats['mean_tau']:.4f}",
-        f"Median τ:               {stats['median_tau']:.4f}",
+        f"Effective tau_eff:        {stats['effective_tau']:.4f}",
+        f"Mean tau:                 {stats['mean_tau']:.4f}",
+        f"Median tau:               {stats['median_tau']:.4f}",
         "",
         f"Deep absorption:        {stats['deep_absorption_frac']*100:.2f}%",
         f"Moderate absorption:    {

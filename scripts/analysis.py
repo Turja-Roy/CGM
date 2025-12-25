@@ -464,9 +464,9 @@ def format_stats_table(stats):
         f"Median flux:            {stats['median_flux']:.4f}",
         f"Std dev:                {stats['std_flux']:.4f}",
         "",
-        f"Effective τ_eff:        {stats['effective_tau']:.4f}",
-        f"Mean τ:                 {stats['mean_tau']:.4f}",
-        f"Median τ:               {stats['median_tau']:.4f}",
+        f"Effective tau_eff:        {stats['effective_tau']:.4f}",
+        f"Mean tau:                 {stats['mean_tau']:.4f}",
+        f"Median tau:               {stats['median_tau']:.4f}",
         "",
         f"Deep absorption:        {stats['deep_absorption_frac']*100:.2f}%",
         f"Moderate absorption:    {

@@ -4,6 +4,8 @@ import argparse
 import scripts.config as config
 from scripts.commands.generate import cmd_generate
 from scripts.commands.analyze import cmd_analyze
+
+
 # Full pipeline: generate spectra from snapshot and analyze them
 def cmd_pipeline(args):
     # Step 1: Generate spectra

@@ -4,6 +4,8 @@ import h5py
 
 import scripts.config as config
 from scripts.hdf5_io import explore_hdf5_structure
+
+
 # List all available simulation data and spectra files
 def cmd_list(args):
     config.list_all_available_data()

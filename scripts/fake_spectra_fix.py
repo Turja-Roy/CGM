@@ -54,7 +54,7 @@ def apply_fake_spectra_bugfixes():
         
         spectra.Spectra._do_interpolation_work = _do_interpolation_work_fixed
         
-        print("✓ Applied fake_spectra bugfixes for Python 3.13 compatibility")
+        print("Applied fake_spectra bugfixes for Python 3.13 compatibility")
         return True
         
     except ImportError:
