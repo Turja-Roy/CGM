@@ -29,6 +29,7 @@ from scripts.plotting import (
 
 def cmd_analyze(args):
     spectra_file = args.spectra_file
+    max_sightlines = args.max_sightlines if hasattr(args, 'max_sightlines') else None
 
     if not os.path.exists(spectra_file):
         print(f"Error: File not found: {spectra_file}")
@@ -120,6 +121,16 @@ def cmd_analyze(args):
             redshift = header.get('redshift', header.get('Redshift', None))
 
     n_sightlines, n_pixels = tau.shape
+    
+    # Subsample if requested to reduce memory usage
+    if max_sightlines is not None and n_sightlines > max_sightlines:
+        print(f"\nSubsampling to {max_sightlines} sightlines (original: {n_sightlines})")
+        indices = np.random.choice(n_sightlines, max_sightlines, replace=False)
+        indices.sort()  # Keep in order
+        tau = tau[indices]
+        flux = np.exp(-tau)
+        n_sightlines = max_sightlines
+    
     print(f"Sightlines: {n_sightlines}")
     print(f"Pixels: {n_pixels}")
     if redshift:

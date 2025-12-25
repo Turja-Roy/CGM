@@ -1,5 +1,7 @@
-__pycache__/
+__pycache__/*
 *.pyc
 venv/
-*.md
+.venv/
 *.hdf5
+*.hdf5.backup
+*.md
