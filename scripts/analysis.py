@@ -32,31 +32,53 @@ def compute_flux_statistics(tau):
     return stats
 
 
-# Compute 1D flux power spectrum P_F(k).
-def compute_power_spectrum(flux, velocity_spacing):
+# Compute 1D flux power spectrum P_F(k) with memory-efficient chunking.
+def compute_power_spectrum(flux, velocity_spacing, chunk_size=1000):
     n_sightlines, n_pixels = flux.shape
 
     # Normalize flux to get flux contrast
     mean_flux = np.mean(flux)
-    delta_F = flux / mean_flux - 1.0
 
     # Wavenumber array (s/km units)
     k = np.fft.rfftfreq(n_pixels, d=velocity_spacing)
+    n_k = len(k)
 
-    # Compute power for each sightline
-    power_spectra = []
-    for i in range(n_sightlines):
-        # FFT of flux contrast
-        flux_fft = np.fft.rfft(delta_F[i])
-        # Power spectrum (dimensionless, normalized by pixel count)
-        power = np.abs(flux_fft)**2 / n_pixels
-        power_spectra.append(power)
+    # Initialize accumulators for mean and variance computation
+    # Using Welford's online algorithm to avoid storing all power spectra
+    power_sum = np.zeros(n_k)
+    power_sum_sq = np.zeros(n_k)
 
-    power_spectra = np.array(power_spectra)
+    # Process in chunks to reduce memory usage
+    n_chunks = int(np.ceil(n_sightlines / chunk_size))
 
-    # Average over sightlines with proper normalization
-    P_k_mean = np.mean(power_spectra, axis=0) * velocity_spacing
-    P_k_std = np.std(power_spectra, axis=0) * velocity_spacing
+    for chunk_idx in range(n_chunks):
+        start_idx = chunk_idx * chunk_size
+        end_idx = min((chunk_idx + 1) * chunk_size, n_sightlines)
+
+        # Get flux chunk and compute contrast
+        flux_chunk = flux[start_idx:end_idx]
+        delta_F_chunk = flux_chunk / mean_flux - 1.0
+
+        # Compute power for this chunk
+        for i in range(delta_F_chunk.shape[0]):
+            # FFT of flux contrast
+            flux_fft = np.fft.rfft(delta_F_chunk[i])
+            # Power spectrum (dimensionless, normalized by pixel count)
+            power = np.abs(flux_fft)**2 / n_pixels
+
+            # Update running sums
+            power_sum += power
+            power_sum_sq += power**2
+
+    # Compute mean and standard deviation
+    P_k_mean = (power_sum / n_sightlines) * velocity_spacing
+
+    # Variance: Var(X) = E[X^2] - E[X]^2
+    mean_power = power_sum / n_sightlines
+    mean_power_sq = power_sum_sq / n_sightlines
+    variance = mean_power_sq - mean_power**2
+    P_k_std = np.sqrt(np.maximum(variance, 0)) * \
+        velocity_spacing  # Ensure non-negative
     P_k_err = P_k_std / np.sqrt(n_sightlines)
 
     # Number of independent modes (useful for error estimation)
@@ -68,7 +90,6 @@ def compute_power_spectrum(flux, velocity_spacing):
         'P_k_std': P_k_std,
         'P_k_err': P_k_err,
         'mean_flux': mean_flux,
-        'delta_F': delta_F,
         'n_modes': n_modes,
         'n_sightlines': n_sightlines,
         'velocity_spacing': velocity_spacing

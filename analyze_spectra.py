@@ -135,45 +135,46 @@ Documentation:
     parser_halo = subparsers.add_parser(
         'halo', help='Analyze individual galaxy halos and their CGM')
     parser_halo.add_argument('snapshot', help='Path to snapshot HDF5')
-    parser_halo.add_argument('--mass-range', nargs=2, type=float, 
-        default=[11.0, 12.5], metavar=('MIN', 'MAX'),
-        help='Halo mass range in log10(M_sun) (default: 11.0 12.5)')
+    parser_halo.add_argument('--mass-range', nargs=2, type=float,
+                             default=[11.0, 12.5], metavar=('MIN', 'MAX'),
+                             help='Halo mass range in log10(M_sun) (default: 11.0 12.5)')
     parser_halo.add_argument('--halo-id', type=int, default=None,
-        help='Analyze specific halo by ID')
+                             help='Analyze specific halo by ID')
     parser_halo.add_argument('--n-halos', type=int, default=10,
-        help='Number of top massive halos to analyze (default: 10)')
+                             help='Number of top massive halos to analyze (default: 10)')
     parser_halo.add_argument('--isolated-only', action='store_true',
-        help='Only analyze isolated halos')
+                             help='Only analyze isolated halos')
     parser_halo.add_argument('--output-dir', type=str, default=None,
-        help='Output directory for plots (default: plots/<sim_name>/halos/)')
+                             help='Output directory for plots (default: plots/<sim_name>/halos/)')
     parser_halo.add_argument('--slice-thickness', type=float, default=1000,
-        help='Projection slice thickness in ckpc/h (default: 1000)')
+                             help='Projection slice thickness in ckpc/h (default: 1000)')
     parser_halo.add_argument('--plot-type', type=str, default='summary',
-        choices=['projection', 'temperature', 'radial', 'summary'],
-        help='Type of plot to generate (default: summary)')
+                             choices=['projection', 'temperature',
+                                      'radial', 'summary'],
+                             help='Type of plot to generate (default: summary)')
     parser_halo.set_defaults(func=cmd_halo)
 
     parser_cgm = subparsers.add_parser(
         'cgm', help='Generate CGM-targeted spectra around halos')
     parser_cgm.add_argument('snapshot', help='Path to snapshot HDF5')
     parser_cgm.add_argument('--mass-range', nargs=2, type=float,
-        default=[11.0, 12.5], metavar=('MIN', 'MAX'),
-        help='Halo mass range in log10(M_sun) (default: 11.0 12.5)')
+                            default=[11.0, 12.5], metavar=('MIN', 'MAX'),
+                            help='Halo mass range in log10(M_sun) (default: 11.0 12.5)')
     parser_cgm.add_argument('--n-halos', type=int, default=None,
-        help='Number of top massive halos to use (default: all halos in mass range)')
+                            help='Number of top massive halos to use (default: all halos in mass range)')
     parser_cgm.add_argument('--impact-params', type=str,
-        default='0.25,0.5,0.75,1.0,1.25',
-        help='Impact parameters in Rvir, comma-separated (default: 0.25,0.5,0.75,1.0,1.25)')
+                            default='0.25,0.5,0.75,1.0,1.25',
+                            help='Impact parameters in Rvir, comma-separated (default: 0.25,0.5,0.75,1.0,1.25)')
     parser_cgm.add_argument('--n-per-bin', type=int, default=100,
-        help='Number of sightlines per impact parameter bin (default: 100)')
+                            help='Number of sightlines per impact parameter bin (default: 100)')
     parser_cgm.add_argument('--azimuthal', type=int, default=8,
-        help='Number of azimuthal angle samples (default: 8)')
+                            help='Number of azimuthal angle samples (default: 8)')
     parser_cgm.add_argument('--line', type=str, default='lya',
-        help='Spectral lines (comma-separated, default: lya)')
+                            help='Spectral lines (comma-separated, default: lya)')
     parser_cgm.add_argument('--output', type=str, default=None,
-        help='Output spectra filename (default: auto-generated)')
+                            help='Output spectra filename (default: auto-generated)')
     parser_cgm.add_argument('--isolated-only', action='store_true',
-        help='Only use isolated halos')
+                            help='Only use isolated halos')
     parser_cgm.set_defaults(func=cmd_cgm)
 
     if len(sys.argv) == 1:
