@@ -107,16 +107,20 @@ def power_spectrum(pos, ngrid, boxsize_mpc, nkbins=40):
     KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing='ij')
     kmag = np.sqrt(KX ** 2 + KY ** 2 + KZ ** 2)
 
-    # CIC window deconvolution: divide P by W(k)^2, W = prod sinc(pi k_i / (2 k_Ny))
+    # CIC window deconvolution. The CIC assignment window is
+    # W_CIC = prod_i sinc^2(pi k_i / (2 k_Ny)) (one sinc per dimension is NGP;
+    # CIC is its square), so P must be divided by W_CIC^2 = prod sinc^4.
+    # Note this factor cancels exactly in the P_var/P_fid ratios (same grid,
+    # same k), so the ratio-based tilt results are unaffected by the choice.
     kny = np.pi * ngrid / boxsize_mpc
     def sinc(t):
         return np.sinc(t / np.pi)            # np.sinc(x) = sin(pi x)/(pi x)
     Wx = sinc(np.pi * KX / (2.0 * kny))
     Wy = sinc(np.pi * KY / (2.0 * kny))
     Wz = sinc(np.pi * KZ / (2.0 * kny))
-    W = Wx * Wy * Wz                           # CIC assignment window (delta_obs = W * delta)
+    W = Wx * Wy * Wz
     W[W == 0] = 1.0
-    pk3d /= W ** 2                             # deconvolve: P_obs = W^2 P_true
+    pk3d /= W ** 4                             # deconvolve: P_obs = W_CIC^2 P_true
 
     # shot noise
     p_shot = vol / npart

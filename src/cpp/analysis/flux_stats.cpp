@@ -13,8 +13,12 @@ FluxStatsResult compute_flux_statistics(const Eigen::ArrayXXf& tau) {
     FluxStatsResult result;
     
     Eigen::ArrayXXf flux = (-tau).array().exp();
-    
-    result.mean_flux = flux.mean();
+
+    // All sum-based reductions must accumulate in double: a float32 accumulator
+    // saturates near 2^24 (~1.7e7), which is exceeded by sum(flux) for
+    // ~1e8 pixels at <F>~0.5 and silently clamps the mean to a
+    // data-independent ceiling (observed: identical mean_flux across variants).
+    result.mean_flux = flux.cast<double>().mean();
     
     // Compute median manually
     std::vector<float> flux_flat(flux.data(), flux.data() + flux.size());
@@ -26,18 +30,18 @@ FluxStatsResult compute_flux_statistics(const Eigen::ArrayXXf& tau) {
         result.median_flux = flux_flat[n/2];
     }
     
-    // Compute std manually
-    float mean = result.mean_flux;
-    float variance = 0.0f;
+    // Compute std manually (double accumulator, see above)
+    double mean = result.mean_flux;
+    double variance = 0.0;
     for (float f : flux_flat) {
         variance += (f - mean) * (f - mean);
     }
     variance /= flux_flat.size();
     result.std_flux = std::sqrt(variance);
-    
+
     result.min_flux = flux.minCoeff();
     result.max_flux = flux.maxCoeff();
-    result.mean_tau = tau.mean();
+    result.mean_tau = tau.cast<double>().mean();
     
     // Compute median for tau
     std::vector<float> tau_flat(tau.data(), tau.data() + tau.size());
@@ -48,13 +52,12 @@ FluxStatsResult compute_flux_statistics(const Eigen::ArrayXXf& tau) {
         result.median_tau = tau_flat[tau_flat.size()/2];
     }
     
-    float mean_flux_val = static_cast<float>(result.mean_flux);
-    result.effective_tau = (mean_flux_val > 0) ? -std::log(mean_flux_val) : std::numeric_limits<double>::infinity();
-    
-    auto total_pixels = static_cast<float>(flux.size());
-    result.deep_absorption_frac = (flux < 0.1f).cast<float>().sum() / total_pixels;
-    result.moderate_absorption_frac = ((flux >= 0.1f) && (flux < 0.5f)).cast<float>().sum() / total_pixels;
-    result.weak_absorption_frac = (flux >= 0.5f).cast<float>().sum() / total_pixels;
+    result.effective_tau = (result.mean_flux > 0) ? -std::log(result.mean_flux) : std::numeric_limits<double>::infinity();
+
+    auto total_pixels = static_cast<double>(flux.size());
+    result.deep_absorption_frac = (flux < 0.1f).cast<double>().sum() / total_pixels;
+    result.moderate_absorption_frac = ((flux >= 0.1f) && (flux < 0.5f)).cast<double>().sum() / total_pixels;
+    result.weak_absorption_frac = (flux >= 0.5f).cast<double>().sum() / total_pixels;
     
     return result;
 }

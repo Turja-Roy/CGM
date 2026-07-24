@@ -54,7 +54,8 @@ PowerSpectrumResult compute_power_spectrum(
     const int n_sightlines = flux.rows();
     const int n_pixels = flux.cols();
     
-    float mean_flux = flux.mean();
+    // Double accumulator: float32 sum saturates near 2^24 for ~1e8 pixels.
+    double mean_flux = flux.cast<double>().mean();
     if (mean_flux <= 0) {
         throw std::invalid_argument("Mean flux must be positive");
     }
