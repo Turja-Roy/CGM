@@ -149,7 +149,7 @@ Examples:
         """
     )
     parser.add_argument('--suite', default='IllustrisTNG', choices=['IllustrisTNG', 'SIMBA'])
-    parser.add_argument('--set', dest='sim_set', default='LH', choices=['LH', '1P', 'CV'])
+    parser.add_argument('--set', dest='sim_set', default='LH', choices=['LH', '1P', 'CV', 'EX'])
     parser.add_argument('--sim', type=str, default='0',
                        help='Simulation identifier (e.g., "80" for LH_80, "p11_2" for 1P_p11_2, "0" for baseline)')
     parser.add_argument('--snapshot', type=int, default=14)
