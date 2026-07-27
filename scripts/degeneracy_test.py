@@ -458,7 +458,6 @@ def d4_redshift_evolution(records_by_snap, out_path, obs_names=('tau_eff', 'mean
                 ax.set_ylabel('tau_eff')
                 ax.set_title(f'{scan} ({SCANS[scan]["label"]}) -- $\\tau_{{\\rm eff}}(z)$')
             elif name == 'mean_flux':
-                ax.set_ylim(-0.05, 0.8)
                 ax.set_ylabel('mean flux')
                 ax.set_title(f'{scan} ({SCANS[scan]["label"]}) -- $\\langle F \\rangle(z)$')
             ax.grid(alpha=0.3)
