@@ -5,6 +5,13 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python"
 
+# Derive the venv's python version and extension suffix instead of hardcoding
+# them -- they were pinned to 3.12 while the venv moved to 3.14, so make install
+# and the .so sync were both landing in the wrong place.
+PY_TAG="$("$VENV_PYTHON" -c 'import sys; print("python%d.%d" % sys.version_info[:2])')"
+EXT_SUFFIX="$("$VENV_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("EXT_SUFFIX"))')"
+SITE_PACKAGES="$SCRIPT_DIR/.venv/lib/$PY_TAG/site-packages"
+
 # Load HPC modules (gcc + MPI + cmake + eigen + fftw)
 module load cmake gcc/13.2.0 impi/19.0.9 eigen/3.4.0 fftw3/3.3.10
 
@@ -22,14 +29,14 @@ cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
     -DUSE_FFTW=ON \
     -DPYTHON_EXECUTABLE="$VENV_PYTHON" \
-    -DCMAKE_INSTALL_PREFIX="$SCRIPT_DIR/.venv/lib/python3.12/site-packages" \
+    -DCMAKE_INSTALL_PREFIX="$SITE_PACKAGES" \
     -Dpybind11_DIR=$("$VENV_PYTHON" -c "import pybind11; print(pybind11.get_cmake_dir())")
 
 make -j$(nproc)
 make install
 
 # Sync freshly built .so into scripts/
-for so in "$SCRIPT_DIR/.venv/lib/python3.12/site-packages/"_*_cpp.cpython-312-x86_64-linux-gnu.so; do
+for so in "$SITE_PACKAGES/"_*_cpp"$EXT_SUFFIX"; do
     dest="$SCRIPT_DIR/scripts/$(basename "$so")"
     cp -p "$so" "$dest.tmp.$$"
     mv -f "$dest.tmp.$$" "$dest"

@@ -236,6 +236,17 @@ def cmd_analyze(args):
     skip_power = getattr(args, 'skip_power_spectrum', False)
     skip_cddf = getattr(args, 'skip_cddf', False)
     skip_lwd = getattr(args, 'skip_line_width', False)
+
+    # Optical depth above which a pixel counts as absorbing. Overridable with
+    # --tau-threshold; see config.TAU_THRESHOLD_HI for why this value is a
+    # systematic and not a neutral default.
+    tau_threshold = getattr(args, 'tau_threshold', None)
+    if tau_threshold is None:
+        tau_threshold = config.TAU_THRESHOLD_HI
+    if tau_threshold != config.TAU_THRESHOLD_HI:
+        print(f"\nUsing non-default HI absorber threshold: tau > {tau_threshold} "
+              f"(default {config.TAU_THRESHOLD_HI})")
+
     # Run expensive computations in parallel when workers > 1
     if num_workers > 1:
         print(f"\n[3-5/8] Running expensive analyses in parallel with {num_workers} workers...")
@@ -251,17 +262,17 @@ def cmd_analyze(args):
         if not skip_cddf:
             if cd_method == 'simple':
                 tasks.append(('cddf', compute_column_density_distribution,
-                            tau, velocity_spacing, 0.5, colden, redshift, box_size_ckpc_h, hubble, omega_m))
+                            tau, velocity_spacing, tau_threshold, colden, redshift, box_size_ckpc_h, hubble, omega_m))
             elif cd_method == 'vpfit':
                 tasks.append(('cddf_vpfit', compute_column_density_distribution_vpfit,
-                            flux, wavelength, redshift, 0.05))
+                            flux, wavelength, redshift, config.TAU_THRESHOLD_VPFIT))
             else:
                 tasks.append(('cddf', compute_column_density_distribution,
-                            tau, velocity_spacing, 0.5, colden, redshift, box_size_ckpc_h, hubble, omega_m))
+                            tau, velocity_spacing, tau_threshold, colden, redshift, box_size_ckpc_h, hubble, omega_m))
 
         if not skip_lwd:
             tasks.append(('lwd', compute_line_width_distribution,
-                        tau, velocity_spacing, 0.5, colden))
+                        tau, velocity_spacing, tau_threshold, colden))
 
         # Execute in parallel
         results = {}
@@ -325,7 +336,7 @@ def cmd_analyze(args):
 
             if cd_method == 'simple':
                 cddf_dict = compute_column_density_distribution(
-                    tau, velocity_spacing, threshold=0.5, colden=colden,
+                    tau, velocity_spacing, threshold=tau_threshold, colden=colden,
                     redshift=redshift, box_size_ckpc_h=box_size_ckpc_h,
                     hubble=hubble, omega_m=omega_m)
                 print(f"Simple pixel optical depth method")
@@ -339,7 +350,7 @@ def cmd_analyze(args):
 
             elif cd_method == 'vpfit':
                 cddf_dict = compute_column_density_distribution_vpfit(
-                    flux, wavelength, redshift, threshold=0.05
+                    flux, wavelength, redshift, threshold=config.TAU_THRESHOLD_VPFIT
                 )
                 if 'error' not in cddf_dict:
                     print("VoigtFit method")
@@ -351,14 +362,14 @@ def cmd_analyze(args):
                     print(f"  Error: {cddf_dict['error']}")
                     print("  Falling back to simple method...")
                     cddf_dict = compute_column_density_distribution(
-                        tau, velocity_spacing, threshold=0.5, colden=colden,
+                        tau, velocity_spacing, threshold=tau_threshold, colden=colden,
                         redshift=redshift, box_size_ckpc_h=box_size_ckpc_h,
                         hubble=hubble, omega_m=omega_m)
 
             else:
                 print(f"Unknown method '{cd_method}', using simple")
                 cddf_dict = compute_column_density_distribution(
-                    tau, velocity_spacing, threshold=0.5, colden=colden,
+                    tau, velocity_spacing, threshold=tau_threshold, colden=colden,
                     redshift=redshift, box_size_ckpc_h=box_size_ckpc_h,
                     hubble=hubble, omega_m=omega_m)
         else:
@@ -368,7 +379,7 @@ def cmd_analyze(args):
             print("\n[4b/8] Computing line width distribution b(N_HI)...")
             try:
                 lwd_dict = compute_line_width_distribution(
-                    tau, velocity_spacing, threshold=0.5, colden=colden)
+                    tau, velocity_spacing, threshold=tau_threshold, colden=colden)
                 print(f"Identified {lwd_dict['n_absorbers']} absorbers with b-parameters")
                 if lwd_dict['n_absorbers'] > 0:
                     print(f"Median b-parameter: {lwd_dict['b_median']:.1f} km/s")
@@ -477,7 +488,7 @@ def cmd_analyze(args):
                         ion_name = f"{elem}{ion}+ {wave}Å"
 
                     # Use lower threshold for metal lines
-                    threshold = 0.5 if elem == 'H' else 0.05
+                    threshold = tau_threshold if elem == 'H' else config.TAU_THRESHOLD_METAL
 
                     print(f"Analyzing {
                           ion_name} (threshold={threshold})...")

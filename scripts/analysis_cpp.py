@@ -128,11 +128,35 @@ def compute_column_density_distribution(
     redshift: Optional[float] = None,
     box_size_ckpc_h: Optional[float] = None,
     hubble: float = 0.6774,
-    omega_m: float = 0.3089
+    omega_m: float = 0.3089,
+    absorber_mode: int = 0,
+    cell_dv: float = 50.0,
+    colden_mode: int = 0,
+    dx_mode: int = 0,
+    norm_mode: int = 0,
+    log_N_min: float = 12.0,
+    log_N_max: float = 22.0,
+    n_bins: int = 50,
+    fit_log_N_min: float = 12.0,
+    fit_log_N_max: float = 14.4771212547196624,
+    min_N_gate: float = 1e12,
 ) -> Dict[str, Any]:
     """Compute column density distribution function.
-    
+
     Uses colden (peak) method when available.
+
+    The mode arguments all default to the historical production behaviour, so an
+    unqualified call is unchanged. They exist so the CDDF systematics can be
+    swept without recompiling (see scripts/cddf_threshold_test.py):
+
+    absorber_mode  0 = contiguous run of pixels with tau > threshold (ours)
+                   1 = whole sightline (fake_spectra column_density_function line=True)
+                   2 = fixed cell_dv km/s cells (fake_spectra line=False, close=cell_dv)
+    colden_mode    0 = max over the feature, 1 = sum (fake_spectra's definition)
+    dx_mode        0 = comoving Mpc box length, 1 = absorption distance X(z) with (1+z)^2
+    norm_mode      0 = divide by dex, 1 = divide by linear dN (true f(N) = dn/dN dX)
+    min_N_gate     absorbers at or below this N_HI are dropped; set 0 to disable
+                   (fake_spectra has no such cut)
     """
     if tau.dtype != np.float32:
         tau = tau.astype(np.float32)
@@ -156,13 +180,15 @@ def compute_column_density_distribution(
     
     result = _cpp_compute_colden(
         tau, velocity_spacing, threshold,
-        colden_arg, redshift_val, box_size_val, hubble, omega_m
+        colden_arg, redshift_val, box_size_val, hubble, omega_m,
+        absorber_mode, cell_dv, colden_mode, dx_mode, norm_mode,
+        log_N_min, log_N_max, n_bins, fit_log_N_min, fit_log_N_max, min_N_gate
     )
-    
+
     bins_arr = np.array(result['bins'])
     bin_centers_arr = np.array(result['bin_centers'])
-    
-    return {
+
+    out = {
         'N_HI': np.array(result['N_HI']),
         'counts': np.array(result['counts']),
         'bins': bins_arr,
@@ -178,6 +204,19 @@ def compute_column_density_distribution(
         'dX': result['dX'],
         'redshift': result['redshift'],
     }
+
+    # Per-absorber diagnostics and the config echo. Guarded so an older,
+    # not-yet-rebuilt extension module still works with the current Python.
+    for key in ('N_HI_alt', 'peak_tau', 'feature_pixels'):
+        if key in result:
+            out[key] = np.array(result[key])
+    for key in ('dX_comoving_mpc', 'X_absorption', 'n_features_total', 'used_colden',
+                'absorber_mode', 'cell_dv', 'colden_mode', 'dx_mode', 'norm_mode',
+                'log_N_min', 'log_N_max', 'n_bins', 'fit_log_N_min', 'fit_log_N_max',
+                'min_N_gate'):
+        if key in result:
+            out[key] = result[key]
+    return out
 
 
 def compute_line_width_distribution(

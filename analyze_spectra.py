@@ -118,6 +118,11 @@ Documentation:
                                 help='Column density calculation method: '
                                 'simple (pixel optical depth), '
                                 'vpfit (Voigt profile fitting)')
+    parser_analyze.add_argument('--tau-threshold', type=float, default=None,
+                                help='Optical depth above which a pixel counts as absorbing when '
+                                'identifying HI absorbers for the CDDF and b-parameter '
+                                'distribution (default: config.TAU_THRESHOLD_HI = 0.5). This is a '
+                                'systematic, not a neutral choice -- see docs/cddf_check/')
     parser_analyze.add_argument('--max-sightlines', type=int, default=None,
                                 help='Maximum number of sightlines to analyze (for memory-limited systems)')
     parser_analyze.add_argument('--workers', type=int, default=1,

@@ -62,10 +62,13 @@ def get_snapshot_number(filepath):
 
 def compute_column_density_distribution(tau, velocity_spacing, threshold=0.5, colden=None,
                                        redshift=None, box_size_ckpc_h=None, hubble=0.6774,
-                                       omega_m=0.3089):
+                                       omega_m=0.3089, **options):
+    """Compute f(N_HI). See analysis_cpp.compute_column_density_distribution for the
+    optional mode arguments (absorber_mode, colden_mode, dx_mode, norm_mode, ...);
+    they all default to the historical production behaviour."""
     return analysis_cpp.compute_column_density_distribution(
         tau, velocity_spacing, threshold, colden,
-        redshift, box_size_ckpc_h, hubble, omega_m
+        redshift, box_size_ckpc_h, hubble, omega_m, **options
     )
 
 

@@ -25,6 +25,23 @@ ANALYSIS_OUTPUT_DIR.mkdir(exist_ok=True)
 COMPARISON_DIR.mkdir(exist_ok=True)
 
 
+# Optical depth above which a pixel counts as "absorbing" when identifying
+# absorbers for the CDDF and the b-parameter distribution.
+#
+# WARNING: TAU_THRESHOLD_HI = 0.5 is an inherited constant with no published
+# justification -- it dates from the first commit and was never revisited. It is
+# not a neutral choice: tau > 0.5 means F < 0.607, so for an unsaturated Lya line
+# (tau_0 = 7.58e-8 N_HI / b) the absorber catalogue is effectively empty below
+# log N_HI ~ 13.0 (b = 15 km/s) to 13.4 (b = 40 km/s), which is roughly the lower
+# half of the fitted range and biases beta low. At z >~ 3 the opposite problem
+# dominates: contiguous tau > 0.5 runs merge across the saturated forest and are
+# counted as one absorber. Quantified in docs/cddf_check/ -- treat it as a
+# systematic to be quoted, not a hidden default.
+TAU_THRESHOLD_HI = 0.5
+TAU_THRESHOLD_METAL = 0.05
+TAU_THRESHOLD_VPFIT = 0.05
+
+
 # CAMEL simulation suites available
 CAMEL_SUITES = {
     'IllustrisTNG': DATA_DIR / "IllustrisTNG",

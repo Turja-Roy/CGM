@@ -4,10 +4,83 @@
 #include <vector>
 #include <algorithm>
 #include <numeric>
+#include <stdexcept>
 #include <omp.h>
 
 namespace cgm {
 namespace analysis {
+
+namespace {
+
+// One absorber, however it was defined.
+struct Absorber {
+    double N_primary;  // N_HI under the requested colden_mode
+    double N_alt;      // N_HI under the other colden_mode (for side-by-side comparison)
+    double peak_tau;
+    int n_pixels;
+};
+
+// Thread-local accumulator. The four vectors stay index-aligned.
+struct AbsorberList {
+    std::vector<double> N_primary;
+    std::vector<double> N_alt;
+    std::vector<double> peak_tau;
+    std::vector<int> n_pixels;
+
+    void push(const Absorber& a) {
+        N_primary.push_back(a.N_primary);
+        N_alt.push_back(a.N_alt);
+        peak_tau.push_back(a.peak_tau);
+        n_pixels.push_back(a.n_pixels);
+    }
+    size_t size() const { return N_primary.size(); }
+};
+
+// Reduce pixels [start, end) of one sightline to a single absorber.
+// The max accumulation is kept in float, exactly as the original code did, so
+// COLDEN_MAX results stay bit-identical to the pre-flag implementation.
+template <typename RowXpr>
+Absorber reduce_feature(const RowXpr& tau_line,
+                        const float* colden_line,
+                        int start, int end,
+                        double velocity_spacing,
+                        int colden_mode) {
+    Absorber a;
+    a.n_pixels = end - start;
+
+    float peak = 0;
+    for (int k = start; k < end; ++k) {
+        peak = std::max(peak, tau_line(k));
+    }
+    a.peak_tau = peak;
+
+    if (colden_line) {
+        float max_colden = 0;
+        double sum_colden = 0;
+        for (int k = start; k < end; ++k) {
+            max_colden = std::max(max_colden, colden_line[k]);
+            sum_colden += colden_line[k];
+        }
+        if (colden_mode == COLDEN_SUM) {
+            a.N_primary = sum_colden;
+            a.N_alt = max_colden;
+        } else {
+            a.N_primary = max_colden;
+            a.N_alt = sum_colden;
+        }
+    } else {
+        // No colden array: fall back to converting the integrated tau.
+        double tau_sum = 0;
+        for (int k = start; k < end; ++k) {
+            tau_sum += tau_line(k);
+        }
+        a.N_primary = constants::TAU_TO_COLDEN_CONSTANT * tau_sum * velocity_spacing;
+        a.N_alt = a.N_primary;
+    }
+    return a;
+}
+
+}  // namespace
 
 // Version with raw pointer - properly handles row-major numpy arrays
 ColumnDensityResult compute_column_density_distribution(
@@ -20,26 +93,55 @@ ColumnDensityResult compute_column_density_distribution(
     double redshift,
     double box_size_ckpc_h,
     double hubble,
-    double omega_m) {
-    
+    double omega_m,
+    const CddfOptions& options) {
+
     const int n_sightlines = tau.rows();
     const int n_pixels = tau.cols();
-    
+
     // Check if colden is valid and matches expected dimensions
     const bool has_colden = (colden_data != nullptr && colden_rows == n_sightlines && colden_cols == n_pixels);
-    
-    std::vector<double> column_densities;
-    column_densities.reserve(n_sightlines * 10);
-    
+
+    if (options.absorber_mode != ABSORBER_THRESHOLD &&
+        options.absorber_mode != ABSORBER_SIGHTLINE &&
+        options.absorber_mode != ABSORBER_CELLS) {
+        throw std::invalid_argument("absorber_mode must be 0 (threshold), 1 (sightline) or 2 (cells)");
+    }
+    if (options.absorber_mode != ABSORBER_THRESHOLD && !has_colden) {
+        // The tau fallback is only meaningful for a genuine tau feature; summing
+        // it over a whole sightline or an arbitrary cell is not a column density.
+        throw std::invalid_argument(
+            "absorber_mode 1 (sightline) and 2 (cells) require a colden array matching tau's shape");
+    }
+    if (options.n_bins <= 0) {
+        throw std::invalid_argument("n_bins must be positive");
+    }
+    if (!(options.log_N_max > options.log_N_min)) {
+        throw std::invalid_argument("log_N_max must exceed log_N_min");
+    }
+
+    // Cell width in pixels for ABSORBER_CELLS. Mirrors fake_spectra
+    // spectra.py:1116: cbins = max(round(close/dvbin), 1), and the trailing
+    // partial cell is dropped by the integer division below.
+    int cell_pixels = 1;
+    if (options.absorber_mode == ABSORBER_CELLS) {
+        if (!(velocity_spacing > 0)) {
+            throw std::invalid_argument("absorber_mode 2 (cells) requires a positive velocity_spacing");
+        }
+        cell_pixels = std::max(static_cast<int>(std::lround(options.cell_dv / velocity_spacing)), 1);
+    }
+
     // Per-sightline feature detection is independent: parallelize across
     // sightlines into thread-local lists, then concatenate. The CDDF histogram
     // and power-law fit are order-independent, so the result is unchanged.
     const int n_threads = omp_get_max_threads();
-    std::vector<std::vector<double>> tl_cd(n_threads);
+    std::vector<AbsorberList> tl_abs(n_threads);
+    std::vector<long long> tl_features(n_threads, 0);
 
     #pragma omp parallel
     {
-        std::vector<double>& local_cd = tl_cd[omp_get_thread_num()];
+        AbsorberList& local = tl_abs[omp_get_thread_num()];
+        long long& local_features = tl_features[omp_get_thread_num()];
 
         #pragma omp for schedule(dynamic, 64)
         for (int i = 0; i < n_sightlines; ++i) {
@@ -48,99 +150,134 @@ ColumnDensityResult compute_column_density_distribution(
         if (has_colden) {
             colden_line = &colden_data[i * n_pixels];  // Row-major access from Python
         }
-        
+
+        if (options.absorber_mode == ABSORBER_SIGHTLINE) {
+            Absorber a = reduce_feature(tau_line, colden_line, 0, n_pixels,
+                                        velocity_spacing, options.colden_mode);
+            ++local_features;
+            if (a.N_primary > options.min_N_gate) {
+                local.push(a);
+            }
+            continue;
+        }
+
+        if (options.absorber_mode == ABSORBER_CELLS) {
+            const int n_cells = n_pixels / cell_pixels;  // trailing partial cell dropped
+            for (int c = 0; c < n_cells; ++c) {
+                Absorber a = reduce_feature(tau_line, colden_line, c * cell_pixels,
+                                            (c + 1) * cell_pixels, velocity_spacing,
+                                            options.colden_mode);
+                ++local_features;
+                if (a.N_primary > options.min_N_gate) {
+                    local.push(a);
+                }
+            }
+            continue;
+        }
+
+        // ABSORBER_THRESHOLD: contiguous runs of tau > threshold.
         bool in_feature = false;
         int feature_start = 0;
-        
+
         for (int j = 0; j < n_pixels; ++j) {
             bool absorbing = tau_line(j) > threshold;
-            
+
             if (absorbing && !in_feature) {
                 in_feature = true;
                 feature_start = j;
             } else if (!absorbing && in_feature) {
-                double N_HI;
-                if (colden_line) {
-                    float max_colden = 0;
-                    for (int k = feature_start; k < j; ++k) {
-                        max_colden = std::max(max_colden, colden_line[k]);
-                    }
-                    N_HI = max_colden;
-                } else {
-                    double tau_sum = 0;
-                    for (int k = feature_start; k < j; ++k) {
-                        tau_sum += tau_line(k);
-                    }
-                    N_HI = constants::TAU_TO_COLDEN_CONSTANT * tau_sum * velocity_spacing;
-                }
-                
-                if (N_HI > constants::COLUMN_DENSITY_MIN) {
-                    local_cd.push_back(N_HI);
+                Absorber a = reduce_feature(tau_line, colden_line, feature_start, j,
+                                            velocity_spacing, options.colden_mode);
+                ++local_features;
+                if (a.N_primary > options.min_N_gate) {
+                    local.push(a);
                 }
                 in_feature = false;
             }
         }
-        
+
         if (in_feature) {
-            double N_HI;
-            if (colden_line) {
-                float max_colden = 0;
-                for (int k = feature_start; k < n_pixels; ++k) {
-                    max_colden = std::max(max_colden, colden_line[k]);
-                }
-                N_HI = max_colden;
-            } else {
-                double tau_sum = 0;
-                for (int k = feature_start; k < n_pixels; ++k) {
-                    tau_sum += tau_line(k);
-                }
-                N_HI = constants::TAU_TO_COLDEN_CONSTANT * tau_sum * velocity_spacing;
-            }
-            if (N_HI > constants::COLUMN_DENSITY_MIN) {
-                local_cd.push_back(N_HI);
+            Absorber a = reduce_feature(tau_line, colden_line, feature_start, n_pixels,
+                                        velocity_spacing, options.colden_mode);
+            ++local_features;
+            if (a.N_primary > options.min_N_gate) {
+                local.push(a);
             }
         }
         }
     }  // end #pragma omp parallel
 
-    for (const auto& vth : tl_cd)
-        column_densities.insert(column_densities.end(), vth.begin(), vth.end());
+    AbsorberList absorbers;
+    long long n_features_total = 0;
+    for (int t = 0; t < n_threads; ++t) {
+        const AbsorberList& src = tl_abs[t];
+        absorbers.N_primary.insert(absorbers.N_primary.end(), src.N_primary.begin(), src.N_primary.end());
+        absorbers.N_alt.insert(absorbers.N_alt.end(), src.N_alt.begin(), src.N_alt.end());
+        absorbers.peak_tau.insert(absorbers.peak_tau.end(), src.peak_tau.begin(), src.peak_tau.end());
+        absorbers.n_pixels.insert(absorbers.n_pixels.end(), src.n_pixels.begin(), src.n_pixels.end());
+        n_features_total += tl_features[t];
+    }
+    std::vector<double>& column_densities = absorbers.N_primary;
+
+    // Both path lengths, so the caller can see the alternative.
+    double dX_comoving_mpc = std::nan("");
+    double X_absorption = std::nan("");
+    if (!std::isnan(redshift) && !std::isnan(box_size_ckpc_h)) {
+        dX_comoving_mpc = box_size_ckpc_h / hubble / 1000.0;
+        // X ~ (H0/c) * L_comoving * (1+z)^2. box_size_ckpc_h is used raw: the h
+        // cancels against the h in H100. See constants.h and fake_spectra
+        // unitsystem.py:31-42.
+        X_absorption = constants::H100_INV_S / constants::LIGHT_CM_S *
+                       box_size_ckpc_h * constants::KPC_IN_CM *
+                       (1.0 + redshift) * (1.0 + redshift);
+    }
 
     double dX;
     if (!std::isnan(redshift) && !std::isnan(box_size_ckpc_h)) {
-        dX = box_size_ckpc_h / hubble / 1000.0;
+        dX = (options.dx_mode == DX_ABSORPTION_DISTANCE) ? X_absorption : dX_comoving_mpc;
     } else {
         dX = 1.0;
     }
-    
-    ColumnDensityResult result;
-    result.n_sightlines = n_sightlines;
-    result.dX = dX;
-    result.redshift = redshift;
-    
-    if (column_densities.empty()) {
-        result.N_HI = Eigen::VectorXd(0);
-        result.counts = Eigen::VectorXi::Zero(50);
-        result.bins = Eigen::VectorXd::LinSpaced(51, 1e12, 1e22);
-        result.bin_centers = Eigen::VectorXd::Zero(50);
-        result.f_N = Eigen::VectorXd::Zero(50);
-        result.beta_fit = std::nan("");
-        result.n_absorbers = 0;
-        return result;
-    }
-    
-    result.N_HI = Eigen::VectorXd::Map(column_densities.data(), column_densities.size());
-    result.n_absorbers = column_densities.size();
-    
-    const int n_bins = 50;
-    const double log_N_min = 12.0;
-    const double log_N_max = 22.0;
-    
+
+    const int n_bins = options.n_bins;
+    const double log_N_min = options.log_N_min;
+    const double log_N_max = options.log_N_max;
+
     Eigen::VectorXd bins = Eigen::VectorXd::LinSpaced(n_bins + 1, log_N_min, log_N_max);
     for (int i = 0; i <= n_bins; ++i) {
         bins(i) = std::pow(10.0, bins(i));
     }
-    
+
+    ColumnDensityResult result;
+    result.n_sightlines = n_sightlines;
+    result.dX = dX;
+    result.redshift = redshift;
+    result.dX_comoving_mpc = dX_comoving_mpc;
+    result.X_absorption = X_absorption;
+    result.n_features_total = static_cast<int>(n_features_total);
+    result.used_colden = has_colden;
+    result.options = options;
+
+    if (column_densities.empty()) {
+        result.N_HI = Eigen::VectorXd(0);
+        result.N_HI_alt = Eigen::VectorXd(0);
+        result.peak_tau = Eigen::VectorXd(0);
+        result.feature_pixels = Eigen::VectorXi(0);
+        result.counts = Eigen::VectorXi::Zero(n_bins);
+        result.bins = bins;
+        result.bin_centers = (bins.head(n_bins) + bins.tail(n_bins)) / 2.0;
+        result.f_N = Eigen::VectorXd::Zero(n_bins);
+        result.beta_fit = std::nan("");
+        result.n_absorbers = 0;
+        return result;
+    }
+
+    result.N_HI = Eigen::VectorXd::Map(column_densities.data(), column_densities.size());
+    result.N_HI_alt = Eigen::VectorXd::Map(absorbers.N_alt.data(), absorbers.N_alt.size());
+    result.peak_tau = Eigen::VectorXd::Map(absorbers.peak_tau.data(), absorbers.peak_tau.size());
+    result.feature_pixels = Eigen::VectorXi::Map(absorbers.n_pixels.data(), absorbers.n_pixels.size());
+    result.n_absorbers = column_densities.size();
+
     Eigen::VectorXi counts = Eigen::VectorXi::Zero(n_bins);
     for (double N : column_densities) {
         if (N >= bins(0) && N <= bins(n_bins)) {
@@ -150,38 +287,55 @@ ColumnDensityResult compute_column_density_distribution(
             counts(bin_idx)++;
         }
     }
-    
+
     Eigen::VectorXd bin_centers = (bins.head(n_bins) + bins.tail(n_bins)) / 2.0;
-    Eigen::VectorXd delta_log_N = Eigen::VectorXd::Constant(n_bins, (log_N_max - log_N_min) / n_bins);
-    
+
+    // NORM_PER_DEX divides by the bin width in dex, NORM_PER_LINEAR_N by the
+    // linear width dN = N_{i+1} - N_i. Only the latter gives f(N) = dn/dN dX,
+    // which is the quantity the literature beta refers to.
+    Eigen::VectorXd bin_width(n_bins);
+    if (options.norm_mode == NORM_PER_LINEAR_N) {
+        bin_width = bins.tail(n_bins) - bins.head(n_bins);
+    } else {
+        bin_width = Eigen::VectorXd::Constant(n_bins, (log_N_max - log_N_min) / n_bins);
+    }
+
     Eigen::VectorXd f_N(n_bins);
     double norm_factor = n_sightlines * dX;
     for (int i = 0; i < n_bins; ++i) {
-        f_N(i) = static_cast<double>(counts(i)) / (norm_factor * delta_log_N(i));
+        f_N(i) = static_cast<double>(counts(i)) / (norm_factor * bin_width(i));
     }
-    
+
     result.bins = bins;
     result.bin_centers = bin_centers;
     result.counts = counts;
     result.f_N = f_N;
-    
-    // Fit power law: f(N) = A * N^(-beta) in range 12 < log(N) < 14.5
+
+    // Fit power law: f(N) = A * N^(-beta) over the requested log N range.
     double beta_fit = std::nan("");
-    
+
+    const double fit_N_min = std::pow(10.0, options.fit_log_N_min);
+    const double fit_N_max = std::pow(10.0, options.fit_log_N_max);
+
     std::vector<double> log_N_fit;
     std::vector<double> log_f_fit;
-    
+
     for (int i = 0; i < n_bins; ++i) {
-        if (bin_centers(i) > 1e12 && bin_centers(i) < 3e14 && counts(i) > 0) {
+        if (bin_centers(i) > fit_N_min && bin_centers(i) < fit_N_max && counts(i) > 0) {
             double log_N = std::log10(bin_centers(i));
             double f_val = f_N(i);
             if (f_val > 0 && std::isfinite(log_N)) {
                 log_N_fit.push_back(log_N);
-                log_f_fit.push_back(std::log10(f_val + 1e-10));
+                // No epsilon floor: f_val > 0 is already guaranteed, and an
+                // absolute 1e-10 destroys the fit under NORM_PER_LINEAR_N, where
+                // f(N) is of order 1e-12 cm^2. (It shifted log10 f by <= 3e-5 in
+                // the legacy per-dex normalisation, so historical beta_fit values
+                // move by ~1e-5 at most.)
+                log_f_fit.push_back(std::log10(f_val));
             }
         }
     }
-    
+
     if (log_N_fit.size() > 5) {
         double sum_x = 0, sum_y = 0, sum_xy = 0, sum_xx = 0;
         int n = log_N_fit.size();
@@ -191,16 +345,16 @@ ColumnDensityResult compute_column_density_distribution(
             sum_xy += log_N_fit[i] * log_f_fit[i];
             sum_xx += log_N_fit[i] * log_N_fit[i];
         }
-        
+
         double denominator = n * sum_xx - sum_x * sum_x;
         if (std::abs(denominator) > 1e-10) {
             double slope = (n * sum_xy - sum_x * sum_y) / denominator;
             beta_fit = -slope;
         }
     }
-    
+
     result.beta_fit = beta_fit;
-    
+
     return result;
 }
 

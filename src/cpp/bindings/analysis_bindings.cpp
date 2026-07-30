@@ -51,26 +51,42 @@ PYBIND11_MODULE(_analysis_cpp, m) {
           py::arg("velocity_spacing"),
           py::arg("chunk_size") = 1000);
     
-    m.def("compute_column_density_distribution", 
+    m.def("compute_column_density_distribution",
           [](const Eigen::Ref<const Eigen::ArrayXXf>& tau, double velocity_spacing, float threshold,
-             py::array_t<float, py::array::c_style | py::array::forcecast> colden, 
-             double redshift, double box_size_ckpc_h, double hubble, double omega_m) {
+             py::array_t<float, py::array::c_style | py::array::forcecast> colden,
+             double redshift, double box_size_ckpc_h, double hubble, double omega_m,
+             int absorber_mode, double cell_dv, int colden_mode, int dx_mode, int norm_mode,
+             double log_N_min, double log_N_max, int n_bins,
+             double fit_log_N_min, double fit_log_N_max, double min_N_gate) {
         // Get buffer info
         py::buffer_info info = colden.request();
-        
+
         const float* colden_data = nullptr;
         int colden_rows = 0, colden_cols = 0;
-        
+
         if (info.size > 0) {
             colden_data = static_cast<const float*>(info.ptr);
             colden_rows = info.shape[0];
             colden_cols = info.shape[1];
         }
-        
+
+        cgm::analysis::CddfOptions opts;
+        opts.absorber_mode = absorber_mode;
+        opts.cell_dv = cell_dv;
+        opts.colden_mode = colden_mode;
+        opts.dx_mode = dx_mode;
+        opts.norm_mode = norm_mode;
+        opts.log_N_min = log_N_min;
+        opts.log_N_max = log_N_max;
+        opts.n_bins = n_bins;
+        opts.fit_log_N_min = fit_log_N_min;
+        opts.fit_log_N_max = fit_log_N_max;
+        opts.min_N_gate = min_N_gate;
+
         // Call C++ function with raw pointer
         auto result = cgm::analysis::compute_column_density_distribution(
             tau, velocity_spacing, threshold, colden_data, colden_rows, colden_cols,
-            redshift, box_size_ckpc_h, hubble, omega_m);
+            redshift, box_size_ckpc_h, hubble, omega_m, opts);
         py::dict d;
         d["N_HI"] = result.N_HI;
         d["counts"] = result.counts;
@@ -82,9 +98,33 @@ PYBIND11_MODULE(_analysis_cpp, m) {
         d["n_sightlines"] = result.n_sightlines;
         d["dX"] = result.dX;
         d["redshift"] = result.redshift;
+        d["N_HI_alt"] = result.N_HI_alt;
+        d["peak_tau"] = result.peak_tau;
+        d["feature_pixels"] = result.feature_pixels;
+        d["dX_comoving_mpc"] = result.dX_comoving_mpc;
+        d["X_absorption"] = result.X_absorption;
+        d["n_features_total"] = result.n_features_total;
+        d["used_colden"] = result.used_colden;
+        d["absorber_mode"] = result.options.absorber_mode;
+        d["cell_dv"] = result.options.cell_dv;
+        d["colden_mode"] = result.options.colden_mode;
+        d["dx_mode"] = result.options.dx_mode;
+        d["norm_mode"] = result.options.norm_mode;
+        d["log_N_min"] = result.options.log_N_min;
+        d["log_N_max"] = result.options.log_N_max;
+        d["n_bins"] = result.options.n_bins;
+        d["fit_log_N_min"] = result.options.fit_log_N_min;
+        d["fit_log_N_max"] = result.options.fit_log_N_max;
+        d["min_N_gate"] = result.options.min_N_gate;
         return d;
     },
-          "Compute column density distribution function",
+          "Compute column density distribution function.\n"
+          "absorber_mode: 0 = contiguous tau > threshold run (default), 1 = whole sightline\n"
+          "  (fake_spectra line=True), 2 = fixed cell_dv km/s cells (fake_spectra line=False).\n"
+          "colden_mode: 0 = max over the feature (default), 1 = sum.\n"
+          "dx_mode: 0 = comoving Mpc box length (default), 1 = absorption distance X(z).\n"
+          "norm_mode: 0 = per dex (default), 1 = per linear dN.\n"
+          "All defaults reproduce the historical production behaviour.",
           py::arg("tau"),
           py::arg("velocity_spacing"),
           py::arg("threshold") = 0.5f,
@@ -92,7 +132,18 @@ PYBIND11_MODULE(_analysis_cpp, m) {
           py::arg("redshift") = std::nan(""),
           py::arg("box_size_ckpc_h") = std::nan(""),
           py::arg("hubble") = 0.6774,
-          py::arg("omega_m") = 0.3089);
+          py::arg("omega_m") = 0.3089,
+          py::arg("absorber_mode") = 0,
+          py::arg("cell_dv") = 50.0,
+          py::arg("colden_mode") = 0,
+          py::arg("dx_mode") = 0,
+          py::arg("norm_mode") = 0,
+          py::arg("log_N_min") = 12.0,
+          py::arg("log_N_max") = 22.0,
+          py::arg("n_bins") = 50,
+          py::arg("fit_log_N_min") = 12.0,
+          py::arg("fit_log_N_max") = 14.4771212547196624,
+          py::arg("min_N_gate") = 1e12);
     
     m.def("compute_line_width_distribution", 
           [](const Eigen::Ref<const Eigen::ArrayXXf>& tau, double velocity_spacing, float threshold,
