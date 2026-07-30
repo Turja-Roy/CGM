@@ -146,10 +146,14 @@ def open_fake_spectra(path):
 
     path = Path(path)
     snap_num = config.extract_simulation_info(str(path))['snap_num']
-    # base deliberately points at a directory with no snapshot in it: the CDDF is a
-    # pure post-processing operation on the savefile.
+    # savedir + bare filename, not a path in savefile: Spectra does
+    # path.join(savedir, savefile) (spectra.py:156-162), which silently discards
+    # savedir for an absolute savefile but concatenates a relative one into
+    # <parent>/SPECTRA_<num>/<relative path>. base deliberately points at a
+    # directory with no snapshot in it: the CDDF is pure post-processing.
     sp = Spectra(int(snap_num), str(path.parent), None, None,
-                 savefile=str(path), reload_file=False, res=None, quiet=True)
+                 savedir=str(path.parent), savefile=path.name,
+                 reload_file=False, res=None, quiet=True)
 
     assert np.isclose(sp.units.UnitLength_in_cm, 3.085678e21, rtol=1e-6), (
         f'unexpected UnitLength_in_cm {sp.units.UnitLength_in_cm}: the savefile does '
