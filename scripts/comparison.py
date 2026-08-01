@@ -124,8 +124,12 @@ def load_results_from_csv(spectra_file):
             'counts': cddf_df['counts'].values if 'counts' in cddf_df else np.zeros_like(log10_N),
             'f_N': f_N,
             'f_N_HI': f_N,
+            'f_N_HI_err': (cddf_df['f_N_HI_err'].values
+                           if 'f_N_HI_err' in cddf_df else None),
             'delta_log_N': delta_log_N,
             'beta_fit': cmeta.get('beta_fit', np.nan),
+            'beta_fit_err': cmeta.get('beta_fit_err', np.nan),
+            'beta_fit_weighted': cmeta.get('beta_fit_weighted', np.nan),
             'n_absorbers': int(cmeta.get('n_absorbers', 0)),
             'n_sightlines': int(cmeta['n_sightlines']) if 'n_sightlines' in cmeta else None,
             # dx_mode = 1 writes the header key as "X", not "dX".
@@ -170,6 +174,7 @@ def load_results_from_csv(spectra_file):
             has_cols = td_df is not None and 'log_temperature' in td_df and len(td_df) > 0
             out['temp_density'] = {
                 'T0': tmeta.get('T0', np.nan),
+                'T0_err': tmeta.get('T0_err', np.nan),
                 'gamma': tmeta.get('gamma', np.nan),
                 'gamma_err': tmeta.get('gamma_err', np.nan),
                 'n_pixels': int(tmeta['n_pixels']) if 'n_pixels' in tmeta and str(tmeta['n_pixels']).replace('.', '', 1).isdigit() else None,

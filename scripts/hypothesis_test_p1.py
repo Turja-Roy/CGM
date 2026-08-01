@@ -91,8 +91,9 @@ def _parse_headered_csv(path):
 
 
 def load_temp_density(path):
-    """Return dict with T0, gamma, gamma_err, n_pixels from the comment header."""
-    out = {'T0': np.nan, 'gamma': np.nan, 'gamma_err': np.nan, 'n_pixels': np.nan}
+    """Return T0, gamma, their errors and n_pixels from the comment header."""
+    out = {'T0': np.nan, 'gamma': np.nan, 'gamma_err': np.nan, 'T0_err': np.nan,
+           'n_bins_fit': np.nan, 'n_pixels': np.nan}
     if not path.exists():
         return out
     with open(path, 'r') as fh:
@@ -203,11 +204,23 @@ def build_scan_frame(analysis_root, cosmo_table, scan, snap):
         row['median_flux'] = fs.get('median_flux',  np.nan)
         row['deep_frac']  = fs.get('deep_absorption_frac', np.nan)
         row['weak_frac']  = fs.get('weak_absorption_frac', np.nan)
+        # _err is sigma/sqrt(N) on the ensemble value; _std is the per-sightline
+        # spread. Neither contains cosmic variance: one box, one realisation.
+        row['tau_eff_err']   = fs.get('tau_eff_err',   np.nan)
+        row['tau_eff_std']   = fs.get('tau_eff_std',   np.nan)
+        row['mean_flux_err'] = fs.get('mean_flux_err', np.nan)
+        row['mean_flux_std'] = fs.get('mean_flux_std', np.nan)
+        # NaN outside 1.7 < z < 4 (rescaling) or without the lya_h line.
+        row['tau_scale_factor'] = fs.get('tau_scale_factor', np.nan)
+        row['tau_eff_H_total']  = fs.get('tau_eff_H_total',  np.nan)
+        row['hi_fraction_eff']  = fs.get('hi_fraction_eff',  np.nan)
 
         cddf_hdr, cddf_df = load_cddf(d / 'cddf.csv')
         row['redshift']    = cddf_hdr.get('redshift',    np.nan)
         row['dX_file']     = cddf_hdr.get('dX',          np.nan)
         row['n_absorbers'] = cddf_hdr.get('n_absorbers', np.nan)
+        row['beta_fit']    = cddf_hdr.get('beta_fit',     np.nan)
+        row['beta_fit_err'] = cddf_hdr.get('beta_fit_err', np.nan)
         row['cddf']        = cddf_df
 
         row['power_spectrum'] = load_power_spectrum(d / 'power_spectrum.csv')
@@ -240,13 +253,15 @@ def plot_t1_1_thermal_trend(rows, out_path, snap_label):
     """T1.1: T0, gamma, n_pixels vs Omega_0."""
     x   = np.array([r['param_value'] for r in rows], dtype=float)
     T0  = np.array([r['T0']          for r in rows], dtype=float)
+    T0e = np.array([r.get('T0_err', np.nan) for r in rows], dtype=float)
     g   = np.array([r['gamma']       for r in rows], dtype=float)
     gerr= np.array([r['gamma_err']   for r in rows], dtype=float)
     npx = np.array([r['n_pixels']    for r in rows], dtype=float)
 
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(12, 5))
 
-    ax0.plot(x, T0 / 1e3, 'o-', color='C0', lw=2, ms=7)
+    ax0.errorbar(x, T0 / 1e3, yerr=T0e / 1e3, fmt='o-', color='C0', lw=2, ms=7,
+                 capsize=3)
     for xi, Ti, r in zip(x, T0, rows):
         if np.isfinite(Ti):
             ax0.annotate(r['suffix'], (xi, Ti / 1e3),
@@ -292,14 +307,20 @@ def plot_t1_2_pathlength(rows, out_path, snap_label):
             continue
         mask = cddf['f_N_HI'] > 0
         lbl = f"{r['suffix']} ($\\Omega_0$={r['param_value']:.2f})"
-
-        axL.plot(cddf['log10_N_HI'][mask], cddf['f_N_HI'][mask],
-                 'o-', color=c, lw=2, ms=4, label=lbl, alpha=0.85)
+        err = _cddf_poisson_err(cddf)
 
         dX_var = dXdz(r['redshift'], r['param_value'])
         corr   = dX_var / dX_fid
-        axR.plot(cddf['log10_N_HI'][mask], cddf['f_N_HI'][mask] / corr,
-                 'o-', color=c, lw=2, ms=4, label=lbl, alpha=0.85)
+
+        for ax, denom in ((axL, 1.0), (axR, corr)):
+            y = cddf['f_N_HI'][mask] / denom
+            ax.plot(cddf['log10_N_HI'][mask], y, 'o-', color=c, lw=2, ms=4,
+                    label=lbl, alpha=0.85)
+            if err is not None:
+                e = err[mask] / denom
+                ax.fill_between(cddf['log10_N_HI'][mask],
+                                np.clip(y - e, 1e-300, None), y + e,
+                                color=c, alpha=0.18, lw=0)
 
     for ax, title in [(axL, 'As-published CDDF'),
                       (axR, r'after $\times$ dX(fid)/dX($\Omega_0$)')]:
@@ -335,18 +356,29 @@ def plot_t1_3_fgpa(rows, out_path, snap_label):
     H_fid  = hubble_ratio(fid['redshift'], fid['param_value'])
     tau_fid= fid['tau_eff']
 
+    tau_fid_err = fid.get('tau_eff_err', np.nan)
+
     x = np.array([r['param_value'] for r in rows], dtype=float)
-    R_meas, R_pred = [], []
+    R_meas, R_pred, R_meas_err = [], [], []
     for r in rows:
         if not np.isfinite(r['T0']) or not np.isfinite(r['tau_eff']):
-            R_meas.append(np.nan); R_pred.append(np.nan); continue
+            R_meas.append(np.nan); R_pred.append(np.nan)
+            R_meas_err.append(np.nan); continue
         H_v = hubble_ratio(r['redshift'], r['param_value'])
         R_pred.append((T0_fid / r['T0']) ** 0.7 * (H_fid / H_v))
-        R_meas.append(r['tau_eff'] / tau_fid)
+        ratio = r['tau_eff'] / tau_fid
+        R_meas.append(ratio)
+        # In quadrature with the fiducial's own error, so the fiducial point does
+        # not come out with a zero bar.
+        rel_v = r.get('tau_eff_err', np.nan) / r['tau_eff']
+        rel_f = tau_fid_err / tau_fid
+        R_meas_err.append(ratio * np.sqrt(rel_v ** 2 + rel_f ** 2))
     R_meas = np.array(R_meas); R_pred = np.array(R_pred)
+    R_meas_err = np.array(R_meas_err, dtype=float)
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(x, R_meas, 'o-', lw=2, ms=8, label=r'measured $\tau_{\rm eff}/\tau_{\rm eff, fid}$')
+    ax.errorbar(x, R_meas, yerr=R_meas_err, fmt='o-', lw=2, ms=8, capsize=3,
+                label=r'measured $\tau_{\rm eff}/\tau_{\rm eff, fid}$')
     ax.plot(x, R_pred, 's--', lw=2, ms=8, label=r'FGPA thermal-only prediction')
     ax.axhline(1.0, color='gray', lw=0.8, ls=':')
     ax.set_xlabel(r'$\Omega_0$')
@@ -540,6 +572,19 @@ def _panel_title(rows, snap):
     return f'{snap}  (z = {z:.2f})' if np.isfinite(z) else snap
 
 
+def _cddf_poisson_err(cddf):
+    """Per-bin Poisson error on f(N). Falls back to f/sqrt(counts) for CSVs written
+    before the f_N_HI_err column existed."""
+    if cddf is None:
+        return None
+    if 'f_N_HI_err' in cddf.columns:
+        return cddf['f_N_HI_err']
+    if 'counts' in cddf.columns:
+        counts = cddf['counts'].astype(float)
+        return cddf['f_N_HI'] / np.sqrt(counts.where(counts > 0))
+    return None
+
+
 def _grid_cddf(frames, snaps, out_path):
     colors = _variant_colors()
     fig, flat = _grid_axes(len(snaps))
@@ -552,6 +597,13 @@ def _grid_cddf(frames, snaps, out_path):
             m = cddf['f_N_HI'] > 0
             ax.plot(cddf['log10_N_HI'][m], cddf['f_N_HI'][m], '-',
                     color=c, lw=1.5, label=f"{r['param_value']:.1f}")
+            # The high-N bins hold single-digit counts in a 25 Mpc/h box.
+            err = _cddf_poisson_err(cddf)
+            if err is not None:
+                ax.fill_between(cddf['log10_N_HI'][m],
+                                np.clip(cddf['f_N_HI'][m] - err[m], 1e-300, None),
+                                cddf['f_N_HI'][m] + err[m],
+                                color=c, alpha=0.18, lw=0)
         ax.set_yscale('log')
         ax.set_title(_panel_title(rows, snap))
         ax.set_xlabel(r'$\log_{10}\, N_{\rm HI}$')
@@ -578,6 +630,10 @@ def _grid_power(frames, snaps, out_path):
             m = (k > 0) & (P > 0)
             ax.loglog(k[m], P[m], '-', color=c, lw=1.5,
                       label=f"{r['param_value']:.1f}")
+            if 'P_k_err' in ps.columns:
+                e = ps['P_k_err'].values
+                ax.fill_between(k[m], np.clip(P[m] - e[m], 1e-300, None), P[m] + e[m],
+                                color=c, alpha=0.18, lw=0)
         ax.set_title(_panel_title(rows, snap))
         ax.set_xlabel(r'$k$ [s/km]')
         ax.set_ylabel(r'$P_F(k)$ [km/s]')
@@ -589,14 +645,28 @@ def _grid_power(frames, snaps, out_path):
 
 
 def _grid_scalar(frames, snaps, out_path, key, ylabel, title,
-                 scale=1.0, logy=False):
-    """One panel per snap: scalar quantity `key` vs Omega_0 (5 points)."""
+                 scale=1.0, logy=False, err_key=None, band_key=None):
+    """One panel per snap: scalar quantity `key` vs Omega_0 (5 points).
+
+    err_key -> error bar (sigma/sqrt(N)); band_key -> shaded band (per-sightline
+    sigma). Both internal to one box.
+    """
     fig, flat = _grid_axes(len(snaps))
     for ax, snap in zip(flat, snaps):
         rows = frames[snap]
         x = np.array([r['param_value'] for r in rows], dtype=float)
         y = np.array([r.get(key, np.nan) for r in rows], dtype=float) * scale
-        ax.plot(x, y, 'o-', color='C0', lw=1.8, ms=6)
+        yerr = None
+        if err_key is not None:
+            yerr = np.array([r.get(err_key, np.nan) for r in rows], dtype=float) * scale
+            if not np.any(np.isfinite(yerr)):
+                yerr = None
+        if band_key is not None:
+            band = np.array([r.get(band_key, np.nan) for r in rows], dtype=float) * scale
+            if np.any(np.isfinite(band)):
+                ax.fill_between(x, y - band, y + band, color='C0', alpha=0.15,
+                                lw=0, label=r'$\pm\sigma$ per sightline')
+        ax.errorbar(x, y, yerr=yerr, fmt='o-', color='C0', lw=1.8, ms=6, capsize=3)
         if logy:
             ax.set_yscale('log')
         ax.set_title(_panel_title(rows, snap))
@@ -655,13 +725,19 @@ def _overlay_tau_eff(frames, snaps, out_path):
         rows = frames[snap]
         x = np.array([r['param_value'] for r in rows], dtype=float)
         y = np.array([r['tau_eff']     for r in rows], dtype=float)
+        e = np.array([r.get('tau_eff_err', np.nan) for r in rows], dtype=float)
+        s = np.array([r.get('tau_eff_std', np.nan) for r in rows], dtype=float)
         z = _panel_z(rows)
         lbl = f'{snap} (z={z:.2f})' if np.isfinite(z) else snap
-        ax.plot(x, y, 'o-', color=c, lw=2, ms=6, label=lbl)
+        if np.any(np.isfinite(s)):
+            ax.fill_between(x, y - s, y + s, color=c, alpha=0.12, lw=0)
+        ax.errorbar(x, y, yerr=e if np.any(np.isfinite(e)) else None,
+                    fmt='o-', color=c, lw=2, ms=6, capsize=3, label=lbl)
     ax.set_yscale('log')
     ax.set_xlabel(r'$\Omega_0$')
     ax.set_ylabel(r'$\tau_{\rm eff}$')
-    ax.set_title(r'$\tau_{\rm eff}(\Omega_0)$ across redshift — ordering crossover')
+    ax.set_title(r'$\tau_{\rm eff}(\Omega_0)$ across redshift — ordering crossover'
+                 '\n' r'bars: $\sigma/\sqrt{N}$   bands: per-sightline $\sigma$')
     ax.grid(alpha=0.3, which='both')
     ax.legend(fontsize=8)
     fig.tight_layout()
@@ -688,13 +764,20 @@ def make_snapshot_grids(analysis_root, cosmo_table, snaps, out_dir):
     _grid_scalar(frames, snaps_sorted, grid_dir / 'grid_tau_eff.png',
                  key='tau_eff', ylabel=r'$\tau_{\rm eff}$',
                  title=r'Effective optical depth vs redshift (p1 $\Omega_0$ scan)',
-                 logy=True)
+                 logy=True, err_key='tau_eff_err', band_key='tau_eff_std')
     _grid_scalar(frames, snaps_sorted, grid_dir / 'grid_mean_flux.png',
                  key='mean_flux', ylabel=r'$\langle F \rangle$',
-                 title=r'Mean transmitted flux vs redshift (p1 $\Omega_0$ scan)')
+                 title=r'Mean transmitted flux vs redshift (p1 $\Omega_0$ scan)',
+                 err_key='mean_flux_err', band_key='mean_flux_std')
     _grid_scalar(frames, snaps_sorted, grid_dir / 'grid_T0.png',
                  key='T0', ylabel=r'$T_0$ [$10^3$ K]', scale=1e-3,
-                 title=r'IGM $T_0$ vs redshift (p1 $\Omega_0$ scan)')
+                 title=r'IGM $T_0$ vs redshift (p1 $\Omega_0$ scan)',
+                 err_key='T0_err')
+    # NaN above z = 4.5, where the forest is saturated.
+    _grid_scalar(frames, snaps_sorted, grid_dir / 'grid_beta.png',
+                 key='beta_fit', ylabel=r'$\beta$ (CDDF slope)',
+                 title=r'CDDF power-law slope vs redshift (p1 $\Omega_0$ scan)',
+                 err_key='beta_fit_err')
     _grid_bparam(frames, snaps_sorted, grid_dir / 'grid_bparam.png')
     _overlay_tau_eff(frames, snaps_sorted, grid_dir / 'tau_eff_vs_Omega0_overlay.png')
 

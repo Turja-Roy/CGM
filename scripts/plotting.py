@@ -198,10 +198,17 @@ def plot_column_density_distribution(cddf_dict, redshift, output_path, title=Non
     # f(N) is now in units of [Mpc^-1]
     f_N = cddf_dict['f_N']
 
-    # Plot
+    # Poisson errors per bin: the high-N end is often two or three absorbers.
     mask = f_N > 0
-    ax.loglog(bin_centers[mask], f_N[mask], 'o-', color='coral',
-              linewidth=2, markersize=5, label='Measured')
+    counts_arr = np.asarray(counts, dtype=float)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        f_N_err = np.where(counts_arr > 0,
+                           f_N / np.sqrt(np.maximum(counts_arr, 1.0)), np.nan)
+    ax.errorbar(bin_centers[mask], f_N[mask], yerr=f_N_err[mask],
+                fmt='o-', color='coral', linewidth=2, markersize=5,
+                capsize=3, ecolor='coral', label='Measured (Poisson errors)')
+    ax.set_xscale('log')
+    ax.set_yscale('log')
 
     # Draw the fit only over the range it was fitted on, so the line cannot
     # imply it constrains decades it never saw.
@@ -259,7 +266,14 @@ def plot_column_density_distribution(cddf_dict, redshift, output_path, title=Non
         info_text += (f"X = {cddf_dict['dX']:.4f}\n" if cddf_dict.get('dx_mode') == 1
                       else f"dX = {cddf_dict['dX']:.1f} Mpc\n")
     if not np.isnan(beta):
-        info_text += f"β = {beta:.2f}"
+        beta_err = cddf_dict.get('beta_fit_err', float('nan'))
+        if beta_err is not None and np.isfinite(beta_err):
+            info_text += f"β = {beta:.2f} ± {beta_err:.2f}"
+            bw = cddf_dict.get('beta_fit_weighted', float('nan'))
+            if bw is not None and np.isfinite(bw):
+                info_text += f"\nβ (Poisson-weighted) = {bw:.2f}"
+        else:
+            info_text += f"β = {beta:.2f}"
     elif cddf_dict.get('saturated'):
         info_text += "β: suppressed (saturated)"
     ax.text(0.05, 0.95, info_text, transform=ax.transAxes,
@@ -535,14 +549,26 @@ def plot_cddf_overlay(cddf_dicts, labels, output_path, redshift=None, title=None
     
     # Plot each CDDF
     for i, (cddf_dict, label) in enumerate(zip(cddf_dicts, labels)):
-        log_N = cddf_dict['log10_N_HI']
-        f_N = cddf_dict['f_N']
-        
+        log_N = np.asarray(cddf_dict['log10_N_HI'])
+        f_N = np.asarray(cddf_dict['f_N'])
+
         # Only plot non-zero values
         mask = f_N > 0
-        
-        ax.plot(log_N[mask], f_N[mask], label=label, color=colors[i], 
+
+        ax.plot(log_N[mask], f_N[mask], label=label, color=colors[i],
                 linewidth=2, alpha=0.8, marker='o', markersize=4)
+
+        err = cddf_dict.get('f_N_HI_err')
+        if err is None and cddf_dict.get('counts') is not None:
+            c = np.asarray(cddf_dict['counts'], dtype=float)
+            with np.errstate(divide='ignore', invalid='ignore'):
+                err = np.where(c > 0, f_N / np.sqrt(np.maximum(c, 1.0)), np.nan)
+        if err is not None:
+            err = np.asarray(err, dtype=float)
+            ax.fill_between(log_N[mask],
+                            np.clip(f_N[mask] - err[mask], 1e-300, None),
+                            f_N[mask] + err[mask],
+                            color=colors[i], alpha=0.18, lw=0)
     
     # Format axis
     ax.set_xlabel(r'log$_{10}$(N$_{\rm HI}$ [cm$^{-2}$])', fontsize=12)
@@ -569,8 +595,11 @@ def plot_flux_stats_comparison(stats_list, labels, output_path, redshift=None, t
     setup_plot_style()
     
     # Select key statistics to plot
-    key_stats = ['mean_flux', 'median_flux', 'mean_tau', 'weak_absorption_frac']
-    stat_labels = ['Mean Flux', 'Median Flux', 'Mean τ', 'Weak Abs. Frac.']
+    # effective_tau, not mean_tau: <tau> is dominated by saturated pixels and is a
+    # saturation artefact, not an observable.
+    key_stats = ['mean_flux', 'median_flux', 'effective_tau', 'weak_absorption_frac']
+    stat_labels = ['Mean Flux', 'Median Flux', r'$\tau_{\rm eff}$', 'Weak Abs. Frac.']
+    stat_errs = ['mean_flux_err', None, 'tau_eff_err', None]
     
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
     axes = axes.flatten()
@@ -581,12 +610,20 @@ def plot_flux_stats_comparison(stats_list, labels, output_path, redshift=None, t
     
     for idx, (stat_key, stat_label) in enumerate(zip(key_stats, stat_labels)):
         ax = axes[idx]
-        
+
         # Extract values
-        values = [stats[stat_key] for stats in stats_list]
-        
+        values = [stats.get(stat_key, np.nan) for stats in stats_list]
+
+        err_key = stat_errs[idx]
+        errs = None
+        if err_key is not None:
+            errs = [stats.get(err_key, np.nan) for stats in stats_list]
+            if not np.any(np.isfinite(np.asarray(errs, dtype=float))):
+                errs = None
+
         # Create bar chart
-        bars = ax.bar(x_pos, values, width, color=colors, alpha=0.7, edgecolor='black')
+        bars = ax.bar(x_pos, values, width, yerr=errs, capsize=4,
+                      color=colors, alpha=0.7, edgecolor='black')
         
         # Format
         ax.set_ylabel(stat_label, fontsize=11)

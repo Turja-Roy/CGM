@@ -135,6 +135,54 @@ def cddf_slope(cddf, logN_lo=13.0, logN_hi=15.0):
     return (np.log10(fhi) - np.log10(flo)) / (logN_hi - logN_lo)
 
 
+def cddf_value_err(cddf, logN_ref):
+    """Poisson error on f(N_HI) at a reference column, taken from the nearest bin
+    rather than interpolated."""
+    if cddf is None:
+        return np.nan
+    m = cddf['f_N_HI'] > 0
+    if not m.any():
+        return np.nan
+    x = cddf['log10_N_HI'][m].values
+    if 'f_N_HI_err' in cddf.columns:
+        e = cddf['f_N_HI_err'][m].values
+    elif 'counts' in cddf.columns:
+        c = cddf['counts'][m].values.astype(float)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            e = np.where(c > 0, cddf['f_N_HI'][m].values / np.sqrt(c), np.nan)
+    else:
+        return np.nan
+    if x.size == 0 or not (x.min() <= logN_ref <= x.max()):
+        return np.nan
+    return float(e[np.argmin(np.abs(x - logN_ref))])
+
+
+def cddf_slope_err(cddf, logN_lo=13.0, logN_hi=15.0):
+    """Error on the two-point log-log slope, propagated from the two endpoints."""
+    flo, fhi = cddf_value(cddf, logN_lo), cddf_value(cddf, logN_hi)
+    elo, ehi = cddf_value_err(cddf, logN_lo), cddf_value_err(cddf, logN_hi)
+    if not all(np.isfinite(v) and v > 0 for v in (flo, fhi)):
+        return np.nan
+    if not (np.isfinite(elo) and np.isfinite(ehi)):
+        return np.nan
+    # d(log10 f) = (1/ln10) df/f
+    s_lo = elo / flo / np.log(10.0)
+    s_hi = ehi / fhi / np.log(10.0)
+    return float(np.sqrt(s_lo ** 2 + s_hi ** 2) / (logN_hi - logN_lo))
+
+
+def b_median_err(lw):
+    """Standard error of the median b, 1.2533 sigma/sqrt(n). Normal approximation;
+    the b distribution is skewed, so treat it as indicative."""
+    if lw is None:
+        return np.nan
+    b = lw['b_param_km_s'].values
+    b = b[np.isfinite(b) & (b > 0)]
+    if b.size < 10:
+        return np.nan
+    return float(1.2533 * np.std(b) / np.sqrt(b.size))
+
+
 def b_median(lw):
     if lw is None:
         return np.nan
@@ -154,6 +202,22 @@ def _obs_extractors():
         'cddf_lowN':  (lambda r: cddf_value(r['cddf'], 13.0),          r'$f(N_{\rm HI}{=}10^{13.0})$',     True),
         'cddf_highN': (lambda r: cddf_value(r['cddf'], 15.0),          r'$f(N_{\rm HI}{=}10^{15.0})$',     True),
         'cddf_slope': (lambda r: cddf_slope(r['cddf']),                r'CDDF log-log slope (13$\to$15)',  False),
+    }
+
+
+# 1-sigma errors, all internal to one box (sightline scatter, Poisson counting).
+# power_ratio has none: propagating P_k_err through two band integrals needs the
+# k-mode covariance, which is not stored.
+def _obs_error_extractors():
+    return {
+        'tau_eff':    lambda r: r.get('tau_eff_err', np.nan),
+        'mean_flux':  lambda r: r.get('mean_flux_err', np.nan),
+        'T0':         lambda r: r.get('T0_err', np.nan),
+        'b_median':   lambda r: b_median_err(r['line_widths']),
+        'power_ratio': lambda r: np.nan,
+        'cddf_lowN':  lambda r: cddf_value_err(r['cddf'], 13.0),
+        'cddf_highN': lambda r: cddf_value_err(r['cddf'], 15.0),
+        'cddf_slope': lambda r: cddf_slope_err(r['cddf']),
     }
 
 
@@ -183,6 +247,8 @@ def scan_record(analysis_root, cosmo, scan, snap):
         'param':  np.array([r['param_value'] for r in rows], float),
         'obs':    {name: np.array([fn(r) for r in rows], float)
                    for name, (fn, _lbl, _lg) in extr.items()},
+        'obs_err': {name: np.array([fn(r) for r in rows], float)
+                    for name, fn in _obs_error_extractors().items()},
     }
     fid = next((r for r in rows if r['suffix'] == FIDUCIAL), None)
     rec['z'] = fid['redshift'] if fid is not None else np.nan
@@ -195,6 +261,21 @@ def _norm_to_fid(arr, fid_idx):
     if fid_idx is None or not np.isfinite(arr[fid_idx]) or arr[fid_idx] == 0:
         return np.full_like(arr, np.nan)
     return arr / arr[fid_idx]
+
+
+def _norm_err_to_fid(arr, err, fid_idx):
+    """Error on arr/arr[fid], including the fiducial's own error so that point does
+    not come out exact."""
+    if fid_idx is None or err is None:
+        return None
+    with np.errstate(divide='ignore', invalid='ignore'):
+        v_fid, e_fid = arr[fid_idx], err[fid_idx]
+        if not np.isfinite(v_fid) or v_fid == 0:
+            return None
+        rel = err / arr
+        rel_fid = e_fid / v_fid
+        out = np.abs(arr / v_fid) * np.sqrt(rel ** 2 + rel_fid ** 2)
+    return out if np.any(np.isfinite(out)) else None
 
 
 # =====================================================================
@@ -219,9 +300,15 @@ def d1_s8_collapse(records, out_path, snap_label):
         for scan in DEGEN_SCANS:
             rec = records[scan]
             y = _norm_to_fid(rec['obs'][name], rec['fid_idx'])
+            yerr = _norm_err_to_fid(rec['obs'][name],
+                                    rec.get('obs_err', {}).get(name),
+                                    rec['fid_idx'])
             x = rec['S8']
-            ax.plot(x, y, SCAN_MARKER[scan] + '-', color=SCAN_COLOR[scan],
-                    lw=1.8, ms=6, label=f'{scan} ({SCANS[scan]["label"]})')
+            # The split score below is only meaningful if the p1/p2 separation
+            # exceeds these bars.
+            ax.errorbar(x, y, yerr=yerr, fmt=SCAN_MARKER[scan] + '-',
+                        color=SCAN_COLOR[scan], lw=1.8, ms=6, capsize=3,
+                        label=f'{scan} ({SCANS[scan]["label"]})')
             curves[scan] = (x, y)
         # Quantify separation: RMS gap between p2 and p1 interpolated onto a
         # shared S_8 grid (only where both are finite).
@@ -444,9 +531,13 @@ def d4_redshift_evolution(records_by_snap, out_path, obs_names=('tau_eff', 'mean
             for vi, suf in enumerate(VARIANT_SUFFIXES):
                 yv = np.array([records_by_snap[s][scan]['obs'][name][vi]
                                for s in snaps_z], float)
+                ev = np.array([records_by_snap[s][scan]
+                               .get('obs_err', {}).get(name, [np.nan] * 5)[vi]
+                               for s in snaps_z], float)
                 pv = records_by_snap[snaps_z[0]][scan]['param'][vi]
-                ax.plot(zarr, yv, 'o-', color=colors[vi], lw=1.6, ms=5,
-                        label=f'{suf} ({pv:.2f})')
+                ax.errorbar(zarr, yv, yerr=ev if np.any(np.isfinite(ev)) else None,
+                            fmt='o-', color=colors[vi], lw=1.6, ms=5, capsize=2,
+                            label=f'{suf} ({pv:.2f})')
                 m = np.isfinite(zarr) & np.isfinite(yv)
                 if m.sum() >= 2:
                     slopes.setdefault(scan, {}).setdefault(name, {})[suf] = \
