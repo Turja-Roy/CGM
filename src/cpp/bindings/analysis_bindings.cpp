@@ -94,6 +94,10 @@ PYBIND11_MODULE(_analysis_cpp, m) {
         d["bin_centers"] = result.bin_centers;
         d["f_N"] = result.f_N;
         d["beta_fit"] = result.beta_fit;
+        d["beta_fit_err"] = result.beta_fit_err;
+        d["beta_fit_weighted"] = result.beta_fit_weighted;
+        d["beta_fit_weighted_err"] = result.beta_fit_weighted_err;
+        d["beta_fit_n_bins"] = result.beta_fit_n_bins;
         d["n_absorbers"] = result.n_absorbers;
         d["n_sightlines"] = result.n_sightlines;
         d["dX"] = result.dX;
@@ -214,6 +218,9 @@ PYBIND11_MODULE(_analysis_cpp, m) {
         d["counts_per_bin"] = result.counts_per_bin;
         d["T0"] = result.T0;
         d["gamma"] = result.gamma;
+        d["gamma_err"] = result.gamma_err;
+        d["T0_err"] = result.T0_err;
+        d["n_bins_fit"] = result.n_bins_fit;
         d["rho_mean"] = result.rho_mean;
         d["n_pixels"] = result.n_pixels;
         d["n_bins"] = result.n_bins;

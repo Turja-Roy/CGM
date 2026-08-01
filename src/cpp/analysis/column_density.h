@@ -58,6 +58,15 @@ struct ColumnDensityResult {
     Eigen::VectorXd bin_centers;
     Eigen::VectorXd f_N;
     double beta_fit;
+
+    // beta_fit stays the unweighted OLS that matches fake_spectra bin-for-bin. The
+    // weighted variant is a systematic: a large gap between the two means the slope
+    // is set by the sparsely populated high-N bins.
+    double beta_fit_err;           // residual standard error of the unweighted slope
+    double beta_fit_weighted;      // Poisson-weighted slope
+    double beta_fit_weighted_err;  // its formal error
+    int beta_fit_n_bins;           // bins that entered the fit
+
     int n_absorbers;
     int n_sightlines;
     double dX;

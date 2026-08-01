@@ -268,6 +268,10 @@ ColumnDensityResult compute_column_density_distribution(
         result.bin_centers = (bins.head(n_bins) + bins.tail(n_bins)) / 2.0;
         result.f_N = Eigen::VectorXd::Zero(n_bins);
         result.beta_fit = std::nan("");
+        result.beta_fit_err = std::nan("");
+        result.beta_fit_weighted = std::nan("");
+        result.beta_fit_weighted_err = std::nan("");
+        result.beta_fit_n_bins = 0;
         result.n_absorbers = 0;
         return result;
     }
@@ -319,6 +323,7 @@ ColumnDensityResult compute_column_density_distribution(
 
     std::vector<double> log_N_fit;
     std::vector<double> log_f_fit;
+    std::vector<double> weight_fit;
 
     for (int i = 0; i < n_bins; ++i) {
         if (bin_centers(i) > fit_N_min && bin_centers(i) < fit_N_max && counts(i) > 0) {
@@ -330,28 +335,78 @@ ColumnDensityResult compute_column_density_distribution(
                 // absolute floor destroys the fit under NORM_PER_LINEAR_N, where
                 // f(N) is of order 1e-12 cm^2.
                 log_f_fit.push_back(std::log10(f_val));
+                // Poisson error on log10 f is (1/ln10)/sqrt(counts), so the
+                // inverse-variance weight is counts * ln(10)^2.
+                const double ln10 = std::log(10.0);
+                weight_fit.push_back(static_cast<double>(counts(i)) * ln10 * ln10);
             }
         }
     }
 
-    if (log_N_fit.size() > 5) {
+    double beta_fit_err = std::nan("");
+    double beta_fit_weighted = std::nan("");
+    double beta_fit_weighted_err = std::nan("");
+    const int n_fit = static_cast<int>(log_N_fit.size());
+
+    if (n_fit > 5) {
+        // Unweighted fit: the production beta, matching fake_spectra bin-for-bin.
         double sum_x = 0, sum_y = 0, sum_xy = 0, sum_xx = 0;
-        int n = log_N_fit.size();
-        for (int i = 0; i < n; ++i) {
+        for (int i = 0; i < n_fit; ++i) {
             sum_x += log_N_fit[i];
             sum_y += log_f_fit[i];
             sum_xy += log_N_fit[i] * log_f_fit[i];
             sum_xx += log_N_fit[i] * log_N_fit[i];
         }
 
-        double denominator = n * sum_xx - sum_x * sum_x;
+        double denominator = n_fit * sum_xx - sum_x * sum_x;
         if (std::abs(denominator) > 1e-10) {
-            double slope = (n * sum_xy - sum_x * sum_y) / denominator;
+            double slope = (n_fit * sum_xy - sum_x * sum_y) / denominator;
+            double intercept = (sum_y - slope * sum_x) / n_fit;
             beta_fit = -slope;
+
+            // Slope standard error from the scatter of the bins about the line,
+            // sqrt( SSR/(n-2) / Sxx ).
+            if (n_fit > 2) {
+                double ssr = 0.0;
+                for (int i = 0; i < n_fit; ++i) {
+                    double resid = log_f_fit[i] - (slope * log_N_fit[i] + intercept);
+                    ssr += resid * resid;
+                }
+                double x_mean = sum_x / n_fit;
+                double sxx = 0.0;
+                for (int i = 0; i < n_fit; ++i) {
+                    double dx = log_N_fit[i] - x_mean;
+                    sxx += dx * dx;
+                }
+                if (sxx > 0.0) {
+                    beta_fit_err = std::sqrt((ssr / (n_fit - 2)) / sxx);
+                }
+            }
+        }
+
+        // Poisson-weighted fit; see column_density.h.
+        double w = 0, wx = 0, wy = 0, wxy = 0, wxx = 0;
+        for (int i = 0; i < n_fit; ++i) {
+            const double wi = weight_fit[i];
+            w += wi;
+            wx += wi * log_N_fit[i];
+            wy += wi * log_f_fit[i];
+            wxy += wi * log_N_fit[i] * log_f_fit[i];
+            wxx += wi * log_N_fit[i] * log_N_fit[i];
+        }
+        double wdenom = w * wxx - wx * wx;
+        if (std::abs(wdenom) > 1e-10) {
+            double wslope = (w * wxy - wx * wy) / wdenom;
+            beta_fit_weighted = -wslope;
+            beta_fit_weighted_err = std::sqrt(w / wdenom);
         }
     }
 
     result.beta_fit = beta_fit;
+    result.beta_fit_err = beta_fit_err;
+    result.beta_fit_weighted = beta_fit_weighted;
+    result.beta_fit_weighted_err = beta_fit_weighted_err;
+    result.beta_fit_n_bins = n_fit;
 
     return result;
 }

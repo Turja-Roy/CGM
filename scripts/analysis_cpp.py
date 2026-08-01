@@ -213,7 +213,10 @@ def compute_column_density_distribution(
     for key in ('dX_comoving_mpc', 'X_absorption', 'n_features_total', 'used_colden',
                 'absorber_mode', 'cell_dv', 'colden_mode', 'dx_mode', 'norm_mode',
                 'log_N_min', 'log_N_max', 'n_bins', 'fit_log_N_min', 'fit_log_N_max',
-                'min_N_gate'):
+                'min_N_gate',
+                # Fit uncertainties; absent until the extension is rebuilt.
+                'beta_fit_err', 'beta_fit_weighted', 'beta_fit_weighted_err',
+                'beta_fit_n_bins'):
         if key in result:
             out[key] = result[key]
     return out

@@ -24,6 +24,10 @@ struct TemperatureDensityBinnedResult {
     Eigen::VectorXi counts_per_bin;
     double T0;
     double gamma;
+    // Formal errors on the T-rho fit, from the scatter of the binned medians.
+    double gamma_err;
+    double T0_err;      // in K, propagated from the intercept error
+    int n_bins_fit;     // populated bins that entered the fit
     double rho_mean;
     int n_pixels;
     int n_bins;

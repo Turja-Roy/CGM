@@ -151,6 +151,9 @@ TemperatureDensityBinnedResult compute_tdens_binned(
     if (n_pixels < 100) {
         result.T0 = std::nan("");
         result.gamma = std::nan("");
+        result.gamma_err = std::nan("");
+        result.T0_err = std::nan("");
+        result.n_bins_fit = 0;
         result.rho_mean = std::nan("");
         result.T_median.setConstant(std::nan(""));
         result.rho_centers.setConstant(std::nan(""));
@@ -213,6 +216,10 @@ TemperatureDensityBinnedResult compute_tdens_binned(
         }
     }
     
+    result.gamma_err = std::nan("");
+    result.T0_err = std::nan("");
+    result.n_bins_fit = static_cast<int>(rho_centers_valid.size());
+
     if (rho_centers_valid.size() > 5) {
         int n = rho_centers_valid.size();
         double sum_x = 0, sum_y = 0, sum_xy = 0, sum_xx = 0;
@@ -228,6 +235,32 @@ TemperatureDensityBinnedResult compute_tdens_binned(
             double intercept = (sum_y - slope * sum_x) / n;
             result.gamma = slope + 1.0;
             result.T0 = std::pow(10.0, intercept);
+
+            // Residual errors of the fit to the binned medians -- not the
+            // pixel-level scatter, which is much larger.
+            if (n > 2) {
+                double ssr = 0.0;
+                for (int i = 0; i < n; ++i) {
+                    double resid = T_median_valid[i]
+                                 - (slope * rho_centers_valid[i] + intercept);
+                    ssr += resid * resid;
+                }
+                double x_mean = sum_x / n;
+                double sxx = 0.0;
+                for (int i = 0; i < n; ++i) {
+                    double dx = rho_centers_valid[i] - x_mean;
+                    sxx += dx * dx;
+                }
+                if (sxx > 0.0) {
+                    double s2 = ssr / (n - 2);
+                    // gamma = slope + 1, so their errors are identical.
+                    result.gamma_err = std::sqrt(s2 / sxx);
+                    double intercept_err =
+                        std::sqrt(s2 * (1.0 / n + x_mean * x_mean / sxx));
+                    // T0 = 10^intercept  =>  dT0 = T0 * ln(10) * d(intercept)
+                    result.T0_err = result.T0 * std::log(10.0) * intercept_err;
+                }
+            }
         } else {
             result.gamma = std::nan("");
             result.T0 = std::nan("");
@@ -236,7 +269,7 @@ TemperatureDensityBinnedResult compute_tdens_binned(
         result.gamma = std::nan("");
         result.T0 = std::nan("");
     }
-    
+
     return result;
 }
 
