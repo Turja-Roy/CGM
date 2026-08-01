@@ -744,6 +744,131 @@ def _overlay_tau_eff(frames, snaps, out_path):
     _save(fig, out_path)
 
 
+def _delta_tau_eff_vs_z(frames, snaps, out_path, scan='p1'):
+    """tau_eff(high parameter) - tau_eff(low parameter) as a function of z.
+
+    Four panels: the raw difference, the same divided by the fiducial (so the
+    z = 4 and z = 0.27 points are comparable), and both again after multiplying
+    tau_eff by E(z). tau_eff per unit velocity carries a 1/H(z) factor, so a
+    difference that vanishes in the bottom row is geometry, not gas.
+    """
+    label = SCANS[scan]['label']
+    entries = []
+    for snap in snaps:
+        rows = frames[snap]
+        z = _panel_z(rows)
+        usable = [r for r in rows
+                  if np.isfinite(r['param_value']) and np.isfinite(r['tau_eff'])]
+        if not np.isfinite(z) or len(usable) < 2:
+            continue
+        usable.sort(key=lambda r: r['param_value'])
+        entries.append({'z': z, 'lo': usable[0], 'hi': usable[-1], 'rows': usable,
+                        'fid': next((r for r in usable if r['suffix'] == FIDUCIAL),
+                                    None)})
+
+    if len(entries) < 2:
+        print('  [delta-tau_eff] need >= 2 snapshots with two variants - skipping')
+        return
+
+    entries.sort(key=lambda e: e['z'])
+    z = np.array([e['z'] for e in entries], float)
+
+    def _err(r):
+        return r.get('tau_eff_err', np.nan)
+
+    # E(z) uses each variant's own Omega_m when the scan varies it; every other
+    # scan holds Omega_m at the fiducial.
+    def _Ez(r, zz):
+        om = r['param_value'] if scan == 'p1' else 0.3
+        return hubble_ratio(zz, om)
+
+    d_raw, d_raw_err, d_geo, d_geo_err = [], [], [], []
+    fid_raw, fid_geo = [], []
+    for e, zz in zip(entries, z):
+        hi, lo = e['hi'], e['lo']
+        d_raw.append(hi['tau_eff'] - lo['tau_eff'])
+        d_raw_err.append(np.sqrt(_err(hi) ** 2 + _err(lo) ** 2))
+
+        hi_g = hi['tau_eff'] * _Ez(hi, zz)
+        lo_g = lo['tau_eff'] * _Ez(lo, zz)
+        d_geo.append(hi_g - lo_g)
+        d_geo_err.append(np.sqrt((_err(hi) * _Ez(hi, zz)) ** 2 +
+                                 (_err(lo) * _Ez(lo, zz)) ** 2))
+
+        f = e['fid']
+        fid_raw.append(f['tau_eff'] if f is not None else np.nan)
+        fid_geo.append(f['tau_eff'] * _Ez(f, zz) if f is not None else np.nan)
+
+    d_raw = np.array(d_raw); d_raw_err = np.array(d_raw_err, float)
+    d_geo = np.array(d_geo); d_geo_err = np.array(d_geo_err, float)
+    fid_raw = np.array(fid_raw); fid_geo = np.array(fid_geo)
+
+    p_lo = entries[0]['lo']['param_value']
+    p_hi = entries[0]['hi']['param_value']
+
+    fig, axes = plt.subplots(2, 2, figsize=(13, 9), sharex=True)
+
+    def _bars(ax, y, yerr, color, lbl=None, ms=7):
+        ax.errorbar(z, y, yerr=yerr if np.any(np.isfinite(yerr)) else None,
+                    fmt='o-', color=color, lw=2, ms=ms, capsize=3, label=lbl)
+        ax.axhline(0.0, color='gray', lw=0.8, ls=':')
+        ax.grid(alpha=0.3)
+
+    _bars(axes[0][0], d_raw, d_raw_err, 'C0',
+          lbl=f'{label} = {p_hi:.2f} minus {p_lo:.2f}')
+    axes[0][0].set_ylabel(r'$\Delta \tau_{\rm eff}$')
+    axes[0][0].set_title(r'$\tau_{\rm eff}$ difference across the scan')
+    axes[0][0].legend(fontsize=9)
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        _bars(axes[0][1], d_raw / fid_raw, d_raw_err / fid_raw, 'C0')
+    axes[0][1].set_ylabel(r'$\Delta \tau_{\rm eff} / \tau_{\rm eff}^{\rm fid}$')
+    axes[0][1].set_title('same, relative to the fiducial')
+
+    _bars(axes[1][0], d_geo, d_geo_err, 'C1')
+    axes[1][0].set_ylabel(r'$\Delta [\tau_{\rm eff} E(z)]$')
+    axes[1][0].set_title(r'geometry removed ($\times E(z) = H(z)/H_0$)')
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        _bars(axes[1][1], d_geo / fid_geo, d_geo_err / fid_geo, 'C1')
+    axes[1][1].set_ylabel(r'$\Delta [\tau_{\rm eff} E] / [\tau_{\rm eff} E]^{\rm fid}$')
+    axes[1][1].set_title('same, relative to the fiducial')
+
+    # Per-variant differences against the fiducial, so the ordering is visible
+    # and not just the two extremes.
+    colors = plt.cm.coolwarm(np.linspace(0, 1, len(VARIANT_SUFFIXES)))
+    for suf, c in zip(VARIANT_SUFFIXES, colors):
+        if suf == FIDUCIAL:
+            continue
+        zv, dv, pv = [], [], np.nan
+        for e, zz in zip(entries, z):
+            r = next((x for x in e['rows'] if x['suffix'] == suf), None)
+            if r is None or e['fid'] is None:
+                continue
+            zv.append(zz)
+            dv.append(r['tau_eff'] - e['fid']['tau_eff'])
+            pv = r['param_value']
+        if len(zv) >= 2:
+            axes[0][0].plot(zv, dv, '-', color=c, lw=1.0, alpha=0.7,
+                            label=f'{pv:.2f} - fid')
+    axes[0][0].legend(fontsize=8)
+
+    for ax in axes[1]:
+        ax.set_xlabel('redshift z')
+
+    fig.suptitle(rf'$\Delta \tau_{{\rm eff}}(z)$ across the {label} scan '
+                 r'— bars: $\sigma/\sqrt{N}$, added in quadrature', fontsize=13)
+    fig.tight_layout()
+    _save(fig, out_path)
+
+    return {'z': z.tolist(),
+            'param_low': float(p_lo), 'param_high': float(p_hi),
+            'delta_tau_eff': d_raw.tolist(),
+            'delta_tau_eff_err': d_raw_err.tolist(),
+            'delta_tau_eff_Ez': d_geo.tolist(),
+            'delta_tau_eff_Ez_err': d_geo_err.tolist()}
+
+
 def make_snapshot_grids(analysis_root, cosmo_table, snaps, out_dir):
     """Build the across-snapshot comparison figures (one panel per snap)."""
     print('\n=== across-snapshot grids ===')
@@ -780,6 +905,12 @@ def make_snapshot_grids(analysis_root, cosmo_table, snaps, out_dir):
                  err_key='beta_fit_err')
     _grid_bparam(frames, snaps_sorted, grid_dir / 'grid_bparam.png')
     _overlay_tau_eff(frames, snaps_sorted, grid_dir / 'tau_eff_vs_Omega0_overlay.png')
+    delta = _delta_tau_eff_vs_z(frames, snaps_sorted,
+                                grid_dir / 'delta_tau_eff_vs_z.png', scan='p1')
+    if delta is not None:
+        with open(grid_dir / 'delta_tau_eff_vs_z.json', 'w') as fh:
+            json.dump(delta, fh, indent=2)
+        print(f'  saved {grid_dir / "delta_tau_eff_vs_z.json"}')
 
 
 # =====================================================================
