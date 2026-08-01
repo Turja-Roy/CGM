@@ -60,6 +60,22 @@ def save_analysis_results(results_dict, output_dir, formats=['csv']):
             save_temp_density_csv(results_dict['temp_density'], csv_path)
             csv_files['temp_density'] = csv_path
         
+        # Not reconstructable later: the spectra HDF5 are deleted after analysis.
+        if results_dict.get('pdfs') is not None:
+            csv_path = output_dir / 'flux_pdf.csv'
+            save_flux_pdf_csv(results_dict['pdfs'], csv_path)
+            csv_files['flux_pdf'] = csv_path
+
+            csv_path = output_dir / 'tau_pdf.csv'
+            save_tau_pdf_csv(results_dict['pdfs'], csv_path)
+            csv_files['tau_pdf'] = csv_path
+
+        if results_dict.get('pdfs_rescaled') is not None:
+            csv_path = output_dir / 'flux_pdf_rescaled.csv'
+            save_flux_pdf_csv(results_dict['pdfs_rescaled'], csv_path,
+                              rescaling=results_dict.get('mean_flux_rescaling'))
+            csv_files['flux_pdf_rescaled'] = csv_path
+
         # Metal lines
         if results_dict.get('metal_lines') and len(results_dict['metal_lines']) > 0:
             csv_path = output_dir / 'metal_lines.csv'
@@ -98,7 +114,13 @@ def save_power_spectrum_csv(power_dict, output_path):
         data['kPk_pi'] = power_dict['kPk_pi']
     if 'kPk_pi_err' in power_dict:
         data['kPk_pi_err'] = power_dict['kPk_pi_err']
-    
+
+    # P_F(k) after rescaling tau to the observed mean flux; extra columns rather than
+    # a separate file so the k grids cannot drift apart. Absent outside 1.7 < z < 4.
+    for key in ('P_k_rescaled', 'P_k_rescaled_std', 'P_k_rescaled_err'):
+        if key in power_dict:
+            data[key] = power_dict[key]
+
     df = pd.DataFrame(data)
     df.to_csv(output_path, index=False, float_format='%.6e')
 
@@ -108,12 +130,21 @@ def save_cddf_csv(cddf_dict, output_path):
     log10_N_HI = cddf_dict.get('log10_N_HI', cddf_dict.get('log_bin_edges'))
     f_N = cddf_dict.get('f_N', cddf_dict.get('f_N_HI'))
     
+    counts = np.asarray(cddf_dict['counts'], dtype=np.float64)
+
     data = {
         'log10_N_HI': log10_N_HI,
         'f_N_HI': f_N,
         'counts': cddf_dict['counts'],
     }
-    
+
+    # Poisson error per bin. Empty bins get NaN, not 0: an empty bin has an unknown
+    # error, not a vanishing one.
+    with np.errstate(divide='ignore', invalid='ignore'):
+        f_N_arr = np.asarray(f_N, dtype=np.float64)
+        f_N_err = np.where(counts > 0, f_N_arr / np.sqrt(np.maximum(counts, 1.0)), np.nan)
+    data['f_N_HI_err'] = f_N_err
+
     if 'delta_log_N' in cddf_dict:
         data['delta_log_N'] = cddf_dict['delta_log_N']
     
@@ -159,6 +190,10 @@ def save_cddf_csv(cddf_dict, output_path):
 
         if 'beta_fit' in cddf_dict and not np.isnan(cddf_dict['beta_fit']):
             f.write(f"# beta_fit = {cddf_dict['beta_fit']:.6f}\n")
+            beta_err = cddf_dict.get('beta_fit_err', np.nan)
+            if beta_err is not None and np.isfinite(beta_err):
+                f.write(f"# beta_fit_err = {beta_err:.6f}\n")
+                f.write(f"# beta_fit_n_bins = {cddf_dict.get('beta_fit_n_bins', -1)}\n")
         if cddf_dict.get('saturated'):
             # beta_fit is deliberately absent here; consumers read it with
             # .get(..., nan), so it degrades to "no fit".
@@ -225,6 +260,7 @@ def save_temp_density_csv(tdens_dict, output_path):
             f.write(f"# T0 = {tdens_dict.get('T0', np.nan)} K\n")
             f.write(f"# gamma = {tdens_dict.get('gamma', np.nan)}\n")
             f.write(f"# gamma_err = {tdens_dict.get('gamma_err', np.nan)}\n")
+            f.write(f"# T0_err = {tdens_dict.get('T0_err', np.nan)} K\n")
             f.write("log_density,log_temperature\n")
         return
     
@@ -246,7 +282,63 @@ def save_temp_density_csv(tdens_dict, output_path):
         f.write(f"# T0 = {tdens_dict.get('T0', np.nan)} K\n")
         f.write(f"# gamma = {tdens_dict.get('gamma', np.nan)}\n")
         f.write(f"# gamma_err = {tdens_dict.get('gamma_err', np.nan)}\n")
+        f.write(f"# T0_err = {tdens_dict.get('T0_err', np.nan)} K\n")
+        f.write(f"# n_bins_fit = {tdens_dict.get('n_bins_fit', -1)}\n")
         f.write(f"# n_pixels = {tdens_dict.get('n_pixels', len(log_T))}\n")
+        df.to_csv(f, index=False, float_format='%.6e')
+
+
+def save_flux_pdf_csv(pdf_dict, output_path, rescaling=None):
+    """Save the transmitted-flux PDF. Fixed bins (scripts.analysis), echoed in the
+    header so files under different binnings cannot be compared by accident."""
+    data = {
+        'flux_bin_center': pdf_dict['flux_bin_centers'],
+        'flux_bin_low': pdf_dict['flux_bin_edges'][:-1],
+        'flux_bin_high': pdf_dict['flux_bin_edges'][1:],
+        'density': pdf_dict['flux_density'],
+        'density_err': pdf_dict['flux_density_err'],
+        'count': pdf_dict['flux_counts'],
+    }
+    df = pd.DataFrame(data)
+
+    with open(output_path, 'w') as f:
+        f.write(f"# n_pixels = {pdf_dict['n_pixels']}\n")
+        f.write(f"# n_bins = {len(pdf_dict['flux_bin_centers'])}\n")
+        f.write("# grid = fixed, [0, 1]\n")
+        f.write("# density: normalised so sum(density * bin_width) = 1\n")
+        f.write("# density_err: Poisson, sqrt(count) / (n_pixels * bin_width)\n")
+        if rescaling is not None:
+            f.write("# computed from RESCALED optical depths\n")
+            f.write(f"# tau_scale_factor = {rescaling.get('tau_scale_factor', np.nan)}\n")
+            f.write(f"# mean_flux_target = {rescaling.get('mean_flux_target', np.nan)}\n")
+        f.write("#\n")
+        df.to_csv(f, index=False, float_format='%.6e')
+
+
+def save_tau_pdf_csv(pdf_dict, output_path):
+    """Save the log10(optical depth) PDF. Out-of-grid pixels are reported as header
+    fractions rather than folded into the edge bins."""
+    data = {
+        'log_tau_bin_center': pdf_dict['log_tau_bin_centers'],
+        'log_tau_bin_low': pdf_dict['log_tau_bin_edges'][:-1],
+        'log_tau_bin_high': pdf_dict['log_tau_bin_edges'][1:],
+        'density': pdf_dict['log_tau_density'],
+        'density_err': pdf_dict['log_tau_density_err'],
+        'count': pdf_dict['log_tau_counts'],
+    }
+    df = pd.DataFrame(data)
+
+    with open(output_path, 'w') as f:
+        f.write(f"# n_pixels = {pdf_dict['n_pixels']}\n")
+        f.write(f"# n_pixels_in_grid = {pdf_dict['n_tau_in_grid']}\n")
+        f.write(f"# n_bins = {len(pdf_dict['log_tau_bin_centers'])}\n")
+        f.write("# grid = fixed, log10(tau) in [-3, 2]\n")
+        f.write(f"# frac_tau_zero = {pdf_dict['frac_tau_zero']:.6e}\n")
+        f.write(f"# frac_tau_underflow = {pdf_dict['frac_tau_underflow']:.6e}\n")
+        f.write(f"# frac_tau_overflow = {pdf_dict['frac_tau_overflow']:.6e}\n")
+        f.write("# density: normalised over the in-grid pixels only\n")
+        f.write("# density_err: Poisson, sqrt(count) / (n_pixels_in_grid * bin_width)\n")
+        f.write("#\n")
         df.to_csv(f, index=False, float_format='%.6e')
 
 

@@ -353,6 +353,10 @@ POWER_SPECTRUM_KMAX = 0.1           # Maximum k for power spectrum (s/km)
 # Format used by fake_spectra: spec.get_tau(element, ion_level, wavelength)
 SPECTRAL_LINES = {
     'lya':  ('H',  1, 1215, 'Lyman-alpha'),
+    # ion = -1: fake_spectra skips the get_reproc_HI() multiplication
+    # (spectra.py:597) and treats all hydrogen as neutral, i.e. the Gunn-Peterson
+    # optical depth. Saved under tau/H/-1/1215 and colden/H/-1.
+    'lya_h': ('H', -1, 1215, 'Lyman-alpha (total H, no ionisation correction)'),
     'lyb':  ('H',  1, 1025, 'Lyman-beta'),
     'heii': ('He', 2, 303,  'HeII-303'),
     'civ':  ('C',  4, 1548, 'CIV-1548'),

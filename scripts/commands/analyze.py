@@ -9,7 +9,10 @@ import scripts.config as config
 from scripts.analysis import (
     compute_flux_statistics,
     compute_effective_optical_depth,
+    compute_flux_tau_pdf,
     compute_power_spectrum,
+    observed_tau_eff,
+    rescale_to_mean_flux,
     compute_column_density_distribution,
     compute_line_width_distribution,
     compute_temperature_density_relation,
@@ -217,7 +220,7 @@ def cmd_analyze(args):
     
     print(f"Sightlines: {n_sightlines}")
     print(f"Pixels: {n_pixels}")
-    if redshift:
+    if redshift is not None:
         print(f"Redshift: z = {redshift:.3f}")
 
     # ========== COMPREHENSIVE ANALYSIS ==========
@@ -235,7 +238,42 @@ def cmd_analyze(args):
     tau_eff_dict = compute_effective_optical_depth(tau)
     print(f"tau_eff = {tau_eff_dict['tau_eff']:.4f} ± {
           tau_eff_dict['tau_eff_err']:.4f}")
-    print(f"Mean transmitted flux <F> = {tau_eff_dict['mean_flux']:.4f}")
+    print(f"  (per-sightline scatter sigma = {tau_eff_dict['tau_eff_std']:.4f}; "
+          f"the +/- above is sigma/sqrt(N), internal only -- no cosmic variance)")
+    print(f"Mean transmitted flux <F> = {tau_eff_dict['mean_flux']:.4f} ± "
+          f"{tau_eff_dict['mean_flux_err']:.4f}")
+
+    # Written to disk here because the spectra HDF5 are deleted afterwards and
+    # nothing else preserves the distributions.
+    print("\n[2b/8] Computing flux and optical-depth PDFs...")
+    pdf_dict = compute_flux_tau_pdf(tau, flux=flux)
+    print(f"Flux PDF: {len(pdf_dict['flux_bin_centers'])} bins on [0, 1]")
+    print(f"log10(tau) PDF: {len(pdf_dict['log_tau_bin_centers'])} bins on [-3, 2]; "
+          f"{pdf_dict['frac_tau_overflow']*100:.3f}% of pixels above the grid, "
+          f"{pdf_dict['frac_tau_zero']*100:.3f}% at tau = 0")
+
+    # Total-hydrogen tau, present only when the spectra carry the 'lya_h' line
+    # (ion = -1). The ratio is the optical-depth-weighted effective HI fraction; the
+    # 1/H(z) geometry factor cancels in it, unlike in tau_eff itself.
+    tau_eff_H = float('nan')
+    hi_fraction_eff = float('nan')
+    with h5py.File(spectra_file, 'r') as f:
+        if 'tau/H/-1/1215' in f:
+            print("\n[2c/8] Found total-H optical depth (ion = -1); computing tau_eff_H...")
+            tau_H = f['tau/H/-1/1215'][:]
+            if max_sightlines is not None and tau_H.shape[0] > max_sightlines:
+                tau_H = tau_H[indices]
+            tau_eff_H_dict = compute_effective_optical_depth(tau_H)
+            tau_eff_H = tau_eff_H_dict['tau_eff']
+            del tau_H
+            if tau_eff_H > 0:
+                hi_fraction_eff = tau_eff_dict['tau_eff'] / tau_eff_H
+            print(f"tau_eff(H, total)  = {tau_eff_H:.4f}")
+            print(f"tau_eff(HI)/tau_eff(H) = {hi_fraction_eff:.4e}  "
+                  f"(effective HI fraction)")
+        else:
+            print("\n[2c/8] No total-H tau in file (regenerate with --line lya,lya_h "
+                  "for the H vs HI contrast)")
 
     # Generate velocity and wavelength arrays
     # Load or compute velocity spacing from header
@@ -274,7 +312,7 @@ def cmd_analyze(args):
 
     # Create wavelength array for VPFIT (centered on Lyman-alpha at given redshift)
     lambda_lya = 1215.67  # Angstroms
-    lambda_rest = lambda_lya * (1 + redshift) if redshift else lambda_lya
+    lambda_rest = lambda_lya * (1 + redshift) if redshift is not None else lambda_lya
     wavelength = lambda_rest * (1 + velocity / 299792.458)  # Doppler shift
 
     # [3/8] Flux power spectrum
@@ -351,7 +389,7 @@ def cmd_analyze(args):
         if cddf_dict and 'error' not in cddf_dict:
             if cd_method == 'simple':
                 print(f"Identified {cddf_dict['n_absorbers']} absorbers")
-                if redshift and box_size_ckpc_h:
+                if redshift is not None and box_size_ckpc_h:
                     print(f"Absorption path length: {_format_dX(cddf_dict)}")
                 if not np.isnan(cddf_dict.get('beta_fit', np.nan)):
                     print(f"Power law index β = {cddf_dict['beta_fit']:.2f}")
@@ -390,7 +428,7 @@ def cmd_analyze(args):
                     redshift, box_size_ckpc_h, hubble, omega_m)
                 print(f"{_cddf_method_label()}")
                 print(f"Identified {cddf_dict['n_absorbers']} absorbers")
-                if redshift and box_size_ckpc_h:
+                if redshift is not None and box_size_ckpc_h:
                     print(f"Absorption path length: {_format_dX(cddf_dict)}")
                 if not np.isnan(cddf_dict.get('beta_fit', np.nan)):
                     print(f"Power law index β = {cddf_dict['beta_fit']:.2f}")
@@ -445,6 +483,52 @@ def cmd_analyze(args):
                 lwd_dict = None
         else:
             print("\n[4b/8] Skipping line width distribution (--skip-line-width)")
+
+    # Scale tau by a constant until <F> matches observation, then compare shapes.
+    # tau_eff after rescaling equals the target by construction and carries no
+    # information; the scale factor and the rescaled shape statistics do.
+    print("\n[4e/8] Mean-flux rescaling to observed tau_eff...")
+    pdf_rescaled = None
+    rescaling = {
+        'tau_eff_obs_target': float('nan'),
+        'mean_flux_target': float('nan'),
+        'tau_scale_factor': float('nan'),
+    }
+    tau_eff_obs = observed_tau_eff(redshift)
+    if np.isfinite(tau_eff_obs):
+        mean_flux_target = float(np.exp(-tau_eff_obs))
+        scale = rescale_to_mean_flux(tau, mean_flux_target)
+        rescaling = {
+            'tau_eff_obs_target': tau_eff_obs,
+            'mean_flux_target': mean_flux_target,
+            'tau_scale_factor': scale,
+        }
+        print(f"Kim+07 target: tau_eff = {tau_eff_obs:.4f}, <F> = {mean_flux_target:.4f}")
+        print(f"tau scale factor A = {scale:.4f}  "
+              f"(<1 means the simulation is too opaque)")
+
+        flux_rescaled = np.exp(-scale * tau)
+        pdf_rescaled = compute_flux_tau_pdf(tau, flux=flux_rescaled)
+
+        # Tests whether the cosmology signal survives marginalising over the UVB
+        # amplitude.
+        if power_dict is not None:
+            try:
+                power_rescaled = compute_power_spectrum(flux_rescaled, velocity_spacing)
+                power_dict['P_k_rescaled'] = power_rescaled['P_k_mean']
+                if 'P_k_std' in power_rescaled:
+                    power_dict['P_k_rescaled_std'] = power_rescaled['P_k_std']
+                if 'P_k_err' in power_rescaled:
+                    power_dict['P_k_rescaled_err'] = power_rescaled['P_k_err']
+                print("Rescaled power spectrum computed")
+            except Exception as e:
+                print(f"Warning: rescaled power spectrum failed: {e}")
+
+        del flux_rescaled
+    else:
+        print(f"Skipped: z = {redshift} is outside the Kim+07 validity range "
+              f"(1.7 < z < 4). Extrapolating that power law is not meaningful; the "
+              f"low-z reference (HST/COS, Danforth+2016) is not implemented yet.")
 
     # [4c/8] Temperature-density relation (if data available)
     skip_tdens = getattr(args, 'skip_temp_density', False)
@@ -533,7 +617,9 @@ def cmd_analyze(args):
                     # Map element symbols to common names
                     elem_map = {'H': 'HI', 'C': 'CIV',
                                 'O': 'OVI', 'Mg': 'MgII', 'Si': 'SiIV'}
-                    if elem in elem_map:
+                    if elem == 'H' and str(ion) == '-1':
+                        ion_name = f"H (total) {wave}Å"
+                    elif elem in elem_map:
                         ion_name = f"{elem_map[elem]} {wave}Å"
                     else:
                         ion_name = f"{elem}{ion}+ {wave}Å"
@@ -543,17 +629,20 @@ def cmd_analyze(args):
 
                     print(f"Analyzing {
                           ion_name} (threshold={threshold})...")
-                    stats = compute_metal_line_statistics(
+                    # Not `stats`: that holds the flux statistics the plotting and
+                    # export blocks below still need.
+                    line_stats = compute_metal_line_statistics(
                         line_tau,
                         velocity_spacing=velocity_spacing,
                         ion_name=ion_name,
                         threshold=threshold,
                         colden=line_colden
                     )
-                    metal_line_stats.append(stats)
+                    metal_line_stats.append(line_stats)
 
-                    print(f"Absorbers: {stats['n_absorbers']}, dN/dz: {stats['dN_dz']:.2f}, "
-                          f"covering: {stats['covering_fraction']*100:.1f}%")
+                    print(f"Absorbers: {line_stats['n_absorbers']}, "
+                          f"dN/dz: {line_stats['dN_dz']:.2f}, "
+                          f"covering: {line_stats['covering_fraction']*100:.1f}%")
 
                 print(f"Multi-line analysis complete")
             else:
@@ -619,43 +708,36 @@ def cmd_analyze(args):
         # Flux distribution
         fig, axes = plt.subplots(2, 2, figsize=config.FIGSIZE_QUAD)
 
-        # Subsample large arrays for faster plotting
-        max_samples = 100000
-        if tau.size > max_samples:
-            sample_indices = np.random.choice(
-                tau.size, max_samples, replace=False)
-            flux_sample = flux.flatten()[sample_indices]
-            tau_sample = tau.flatten()[sample_indices]
-        else:
-            flux_sample = flux.flatten()
-            tau_sample = tau.flatten()
-
-        # Panel 1: Flux histogram
+        # Exact PDFs, not the 1e5-of-1e8-pixel subsample this replaced.
         ax = axes[0, 0]
-        ax.hist(flux_sample, bins=50, density=True, alpha=0.7,
-                color='steelblue', edgecolor='black')
+        ax.errorbar(pdf_dict['flux_bin_centers'], pdf_dict['flux_density'],
+                    yerr=pdf_dict['flux_density_err'], fmt='o-', ms=3, lw=1.2,
+                    color='steelblue', ecolor='steelblue', capsize=2,
+                    label='PDF (Poisson errors)')
         ax.axvline(stats['mean_flux'], color='red', linestyle='--',
                    label=f"Mean = {stats['mean_flux']:.3f}")
         ax.axvline(stats['median_flux'], color='orange', linestyle='--',
                    label=f"Median = {stats['median_flux']:.3f}")
-        ax.set_xlabel('Flux')
+        ax.set_xlabel('Flux $F = e^{-\\tau}$')
         ax.set_ylabel('Probability Density')
         ax.set_title('Flux Distribution')
-        ax.legend()
+        ax.set_yscale('log')
+        ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
 
-        # Panel 2: Optical depth histogram
         ax = axes[0, 1]
-        # Clip tau for visualization (very large values can cause issues)
-        tau_clipped = np.clip(tau_sample, 0, 10)
-        ax.hist(tau_clipped, bins=50, density=True,
-                alpha=0.7, color='coral', edgecolor='black')
-        ax.axvline(min(stats['mean_tau'], 10), color='red', linestyle='--',
-                   label=f"Mean = {stats['mean_tau']:.3f}")
-        ax.set_xlabel(r'Optical Depth $\tau$ (clipped at 10)')
+        ax.errorbar(pdf_dict['log_tau_bin_centers'], pdf_dict['log_tau_density'],
+                    yerr=pdf_dict['log_tau_density_err'], fmt='o-', ms=3, lw=1.2,
+                    color='coral', ecolor='coral', capsize=2)
+        ax.axvline(np.log10(max(stats['median_tau'], 1e-30)), color='red',
+                   linestyle='--', label=f"Median = {stats['median_tau']:.3g}")
+        ax.set_xlabel(r'$\log_{10} \tau$')
         ax.set_ylabel('Probability Density')
-        ax.set_title('Optical Depth Distribution')
-        ax.legend()
+        ax.set_title(r'Optical Depth Distribution'
+                     f"\n({pdf_dict['frac_tau_overflow']*100:.2f}% above grid, "
+                     f"{pdf_dict['frac_tau_zero']*100:.2f}% at $\\tau=0$)")
+        ax.set_yscale('log')
+        ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
 
         # Panel 3: Mean flux per sightline
@@ -665,10 +747,16 @@ def cmd_analyze(args):
                 linestyle='-', markersize=3, alpha=0.6)
         ax.axhline(stats['mean_flux'], color='red',
                    linestyle='--', label='Overall mean')
+        # Band: per-sightline spread. The ensemble mean is known ~100x better.
+        ax.axhspan(stats['mean_flux'] - tau_eff_dict['mean_flux_std'],
+                   stats['mean_flux'] + tau_eff_dict['mean_flux_std'],
+                   color='red', alpha=0.12,
+                   label=r'$\pm\sigma$ (per sightline)')
         ax.set_xlabel('Sightline Index')
         ax.set_ylabel('Mean Flux')
-        ax.set_title('Mean Flux per Sightline')
-        ax.legend()
+        ax.set_title(f"Mean Flux per Sightline "
+                     f"($\\sigma/\\sqrt{{N}}$ = {tau_eff_dict['mean_flux_err']:.4f})")
+        ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
 
         # Panel 4: Transmission statistics
@@ -770,6 +858,16 @@ def cmd_analyze(args):
         # needs raw tau, so we only carry the two scalars.
         stats['tau_eff_err'] = tau_eff_dict.get('tau_eff_err', float('nan'))
         stats['tau_eff_std'] = tau_eff_dict.get('tau_eff_std', float('nan'))
+        stats['mean_flux_err'] = tau_eff_dict.get('mean_flux_err', float('nan'))
+        stats['mean_flux_std'] = tau_eff_dict.get('mean_flux_std', float('nan'))
+        stats['n_sightlines'] = tau_eff_dict.get('n_sightlines', n_sightlines)
+
+        # NaN outside 1.7 < z < 4.
+        stats.update(rescaling)
+
+        # NaN unless the spectra carry the ion = -1 line.
+        stats['tau_eff_H_total'] = tau_eff_H
+        stats['hi_fraction_eff'] = hi_fraction_eff
 
         # Prepare results dictionary
         results_dict = {
@@ -783,6 +881,9 @@ def cmd_analyze(args):
             'flux_stats': stats,
             'tau_eff': tau_eff_dict,
             'power_spectrum': power_dict,
+            'pdfs': pdf_dict,
+            'pdfs_rescaled': pdf_rescaled,
+            'mean_flux_rescaling': rescaling,
             'cddf': cddf_dict,
             'line_widths': lwd_dict,
             'temp_density': tdens_dict,
@@ -806,9 +907,15 @@ def cmd_analyze(args):
     print("COMPREHENSIVE ANALYSIS COMPLETE")
     print(f"{'=' * 70}")
     print(f"\nKey Results:")
-    print(f"Mean flux <F>:           {tau_eff_dict['mean_flux']:.4f}")
+    print(f"Mean flux <F>:           {tau_eff_dict['mean_flux']:.4f} ± {
+          tau_eff_dict['mean_flux_err']:.4f}")
     print(f"Effective tau tau_eff:     {tau_eff_dict['tau_eff']:.4f} ± {
           tau_eff_dict['tau_eff_err']:.4f}")
+    if np.isfinite(rescaling['tau_scale_factor']):
+        print(f"tau scale factor A:      {rescaling['tau_scale_factor']:.4f} "
+              f"(to Kim+07 tau_eff = {rescaling['tau_eff_obs_target']:.4f})")
+    if np.isfinite(hi_fraction_eff):
+        print(f"tau_eff(HI)/tau_eff(H):  {hi_fraction_eff:.4e}")
     print(f"Number of absorbers:     {cddf_dict['n_absorbers']}")
     if not np.isnan(cddf_dict['beta_fit']):
         print(f"CDDF power law β:        {cddf_dict['beta_fit']:.2f}")
@@ -826,9 +933,10 @@ def cmd_analyze(args):
     if len(metal_line_stats) > 1:
         print(
             f"Multi-line analysis:     {len(metal_line_stats)} lines detected")
-        for stats in metal_line_stats:
-            print(f"{stats['ion_name']:15s}: {stats['n_absorbers']:4d} absorbers, "
-                f"dN/dz={stats['dN_dz']:5.1f}, covering={stats['covering_fraction']*100:4.1f}%")
+        for line_stats in metal_line_stats:
+            print(f"{line_stats['ion_name']:15s}: {line_stats['n_absorbers']:4d} absorbers, "
+                  f"dN/dz={line_stats['dN_dz']:5.1f}, "
+                  f"covering={line_stats['covering_fraction']*100:4.1f}%")
 
     print(f"\nPlots saved to: {config.PLOTS_DIR}")
     print("- Sample spectra")
@@ -847,6 +955,10 @@ def cmd_analyze(args):
         print("- power_spectrum.csv")
         print("- cddf.csv")
         print("- flux_stats.csv")
+        print("- flux_pdf.csv")
+        print("- tau_pdf.csv")
+        if pdf_rescaled is not None:
+            print("- flux_pdf_rescaled.csv")
         if lwd_dict is not None and lwd_dict['n_absorbers'] > 0:
             print("- line_widths.csv")
         if tdens_dict is not None:

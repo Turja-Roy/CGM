@@ -73,23 +73,190 @@ def compute_column_density_distribution(tau, velocity_spacing, threshold=0.5, co
 
 
 def compute_effective_optical_depth(tau):
+    """tau_eff = -ln<F>, with sightline-to-sightline errors.
+
+    Errors are internal to one box: no cosmic variance. *_std is the per-sightline
+    spread, *_err is that over sqrt(N).
+    """
     flux = np.exp(-tau)
 
     # Global tau_eff
-    mean_flux = np.mean(flux)
+    mean_flux = np.mean(flux, dtype=np.float64)
     tau_eff = -np.log(mean_flux)
 
     # Per-sightline tau_eff
-    mean_flux_per_los = np.mean(flux, axis=1)
+    mean_flux_per_los = np.mean(flux, axis=1, dtype=np.float64)
     tau_eff_per_los = -np.log(mean_flux_per_los)
+    n_los = len(tau_eff_per_los)
 
     return {
         'tau_eff': float(tau_eff),
         'mean_flux': float(mean_flux),
         'tau_eff_per_sightline': tau_eff_per_los,
         'tau_eff_std': float(np.std(tau_eff_per_los)),
-        'tau_eff_err': float(np.std(tau_eff_per_los) / np.sqrt(len(tau_eff_per_los)))
+        'tau_eff_err': float(np.std(tau_eff_per_los) / np.sqrt(n_los)),
+        'mean_flux_std': float(np.std(mean_flux_per_los)),
+        'mean_flux_err': float(np.std(mean_flux_per_los) / np.sqrt(n_los)),
+        'n_sightlines': int(n_los),
     }
+
+
+##############################
+# FLUX / OPTICAL DEPTH PDFs  #
+##############################
+
+# Fixed grids: PDFs are only comparable bin-for-bin across redshift and cosmology if
+# the bins never move. tau is binned in log10 because the forest spans four decades.
+FLUX_PDF_BINS = 50
+FLUX_PDF_RANGE = (0.0, 1.0)
+LOG_TAU_PDF_BINS = 60
+LOG_TAU_PDF_RANGE = (-3.0, 2.0)
+
+
+def _pdf_from_counts(counts, edges, n_total):
+    """Normalised density and its Poisson error, given raw bin counts."""
+    counts = counts.astype(np.float64)
+    widths = np.diff(edges)
+    density = counts / (n_total * widths)
+    density_err = np.sqrt(counts) / (n_total * widths)
+    return density, density_err
+
+
+def compute_flux_tau_pdf(tau, flux=None, chunk_size=500):
+    """Flux PDF and log10(tau) PDF over every pixel, with Poisson errors.
+
+    Chunked over sightlines to avoid another full-size copy (tau is ~400 MB at
+    1e4 x 1e4 float32). Counts are exact, not subsampled.
+    """
+    n_sightlines = tau.shape[0]
+
+    flux_counts = np.zeros(FLUX_PDF_BINS, dtype=np.int64)
+    tau_counts = np.zeros(LOG_TAU_PDF_BINS, dtype=np.int64)
+    flux_edges = np.linspace(*FLUX_PDF_RANGE, FLUX_PDF_BINS + 1)
+    tau_edges = np.linspace(*LOG_TAU_PDF_RANGE, LOG_TAU_PDF_BINS + 1)
+
+    n_total = 0
+    # Out-of-grid pixels are counted, not folded into the edge bins.
+    n_tau_underflow = 0
+    n_tau_overflow = 0
+    n_tau_zero = 0
+
+    for start in range(0, n_sightlines, chunk_size):
+        stop = min(start + chunk_size, n_sightlines)
+        tau_chunk = tau[start:stop].ravel()
+
+        if flux is None:
+            flux_chunk = np.exp(-tau_chunk.astype(np.float64))
+        else:
+            flux_chunk = flux[start:stop].ravel()
+
+        flux_counts += np.histogram(flux_chunk, bins=flux_edges)[0]
+
+        positive = tau_chunk > 0
+        n_tau_zero += int(tau_chunk.size - np.count_nonzero(positive))
+        log_tau = np.log10(tau_chunk[positive].astype(np.float64))
+        tau_counts += np.histogram(log_tau, bins=tau_edges)[0]
+        n_tau_underflow += int(np.count_nonzero(log_tau < LOG_TAU_PDF_RANGE[0]))
+        n_tau_overflow += int(np.count_nonzero(log_tau > LOG_TAU_PDF_RANGE[1]))
+
+        n_total += tau_chunk.size
+
+    n_tau_in_grid = int(tau_counts.sum())
+
+    flux_density, flux_density_err = _pdf_from_counts(flux_counts, flux_edges, n_total)
+    # Normalised over in-grid pixels only; the fractions below say what was left out.
+    tau_density, tau_density_err = _pdf_from_counts(
+        tau_counts, tau_edges, max(n_tau_in_grid, 1))
+
+    return {
+        'flux_bin_edges': flux_edges,
+        'flux_bin_centers': 0.5 * (flux_edges[1:] + flux_edges[:-1]),
+        'flux_counts': flux_counts,
+        'flux_density': flux_density,
+        'flux_density_err': flux_density_err,
+        'log_tau_bin_edges': tau_edges,
+        'log_tau_bin_centers': 0.5 * (tau_edges[1:] + tau_edges[:-1]),
+        'log_tau_counts': tau_counts,
+        'log_tau_density': tau_density,
+        'log_tau_density_err': tau_density_err,
+        'n_pixels': n_total,
+        'n_tau_in_grid': n_tau_in_grid,
+        'frac_tau_zero': n_tau_zero / n_total if n_total else np.nan,
+        'frac_tau_underflow': n_tau_underflow / n_total if n_total else np.nan,
+        'frac_tau_overflow': n_tau_overflow / n_total if n_total else np.nan,
+    }
+
+
+#########################
+# MEAN FLUX RESCALING   #
+#########################
+
+# Kim, Bolton, Viel, Haehnelt & Carswell (2007), MNRAS 382, 1657 (arXiv:0711.1862):
+#   tau_eff = (0.0023 +/- 0.0007) (1+z)^(3.65 +/- 0.21), fitted over 1.7 < z < 4.
+KIM07_TAU_EFF_A = 0.0023
+KIM07_TAU_EFF_GAMMA = 3.65
+KIM07_Z_MIN = 1.7
+KIM07_Z_MAX = 4.0
+
+
+def observed_tau_eff(redshift):
+    """Observed tau_eff(z), NaN outside 1.7 < z < 4 rather than extrapolated.
+
+    Below z = 1.7 the right reference is HST/COS (Danforth et al. 2016), not this
+    power law; no value from it has been verified yet.
+    """
+    if redshift is None or not np.isfinite(redshift):
+        return float('nan')
+    if redshift < KIM07_Z_MIN or redshift > KIM07_Z_MAX:
+        return float('nan')
+    return float(KIM07_TAU_EFF_A * (1.0 + redshift) ** KIM07_TAU_EFF_GAMMA)
+
+
+def rescale_to_mean_flux(tau, mean_flux_desired, tol=1e-6, max_iter=50,
+                         chunk_size=500):
+    """Solve <exp(-A tau)> = mean_flux_desired for the scalar A, by Newton-Raphson.
+
+    Absorbs the UVB-amplitude uncertainty: only the shape of tau is trusted, not its
+    normalisation. Same result as fake_spectra.fluxstatistics.mean_flux(), but chunked
+    -- that one casts the whole array to float64 (+800 MB at 1e4 x 1e4).
+
+    NaN target (z outside the Kim+07 range) returns NaN.
+    """
+    if mean_flux_desired is None or not np.isfinite(mean_flux_desired):
+        return float('nan')
+    if not (0.0 < mean_flux_desired < 1.0):
+        return float('nan')
+
+    n_sightlines = tau.shape[0]
+
+    def _mean_flux_and_derivative(scale):
+        # d<F>/dA = -<tau exp(-A tau)>
+        total_f = 0.0
+        total_df = 0.0
+        n = 0
+        for start in range(0, n_sightlines, chunk_size):
+            stop = min(start + chunk_size, n_sightlines)
+            t = tau[start:stop].ravel().astype(np.float64)
+            f = np.exp(-scale * t)
+            total_f += f.sum()
+            total_df -= (t * f).sum()
+            n += t.size
+        return total_f / n, total_df / n
+
+    scale = 1.0
+    for _ in range(max_iter):
+        mf, dmf = _mean_flux_and_derivative(scale)
+        residual = mf - mean_flux_desired
+        if abs(residual) < tol:
+            return float(scale)
+        if dmf == 0.0:
+            break
+        new_scale = scale - residual / dmf
+        # The scaling is positive by construction; a step through zero means the
+        # target is far, so halve instead of diverging.
+        scale = new_scale if new_scale > 0 else scale / 2.0
+
+    return float(scale)
 
 
 def compute_line_width_distribution(tau, velocity_spacing, threshold=0.5, colden=None):
@@ -519,6 +686,10 @@ def compute_temperature_density_chunked(
     return {
         'T0': result['T0'],
         'gamma': result['gamma'],
+        # .get(): absent until the extension is rebuilt.
+        'gamma_err': result.get('gamma_err', float('nan')),
+        'T0_err': result.get('T0_err', float('nan')),
+        'n_bins_fit': result.get('n_bins_fit', -1),
         'rho_mean': rho_mean,
         'n_pixels': result['n_pixels'],
         'T_median': np.array(result['T_median']),
