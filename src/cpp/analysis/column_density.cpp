@@ -327,10 +327,8 @@ ColumnDensityResult compute_column_density_distribution(
             if (f_val > 0 && std::isfinite(log_N)) {
                 log_N_fit.push_back(log_N);
                 // No epsilon floor: f_val > 0 is already guaranteed, and an
-                // absolute 1e-10 destroys the fit under NORM_PER_LINEAR_N, where
-                // f(N) is of order 1e-12 cm^2. (It shifted log10 f by <= 3e-5 in
-                // the legacy per-dex normalisation, so historical beta_fit values
-                // move by ~1e-5 at most.)
+                // absolute floor destroys the fit under NORM_PER_LINEAR_N, where
+                // f(N) is of order 1e-12 cm^2.
                 log_f_fit.push_back(std::log10(f_val));
             }
         }

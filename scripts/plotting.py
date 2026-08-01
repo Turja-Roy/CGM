@@ -182,8 +182,10 @@ def plot_column_density_distribution(cddf_dict, redshift, output_path, title=Non
     """
     Plot the column density distribution function (CDDF).
     
-    The CDDF shows f(N) = dN/dlog10(N_HI) in units of [Mpc^-1] (comoving).
-    This is properly normalized by the number of sightlines and absorption path length.
+    Under config.CDDF_OPTIONS this is f(N) = dn/dN dX in cm^2, normalised by the
+    number of sightlines and the dimensionless absorption distance X(z). Axis
+    labels and limits follow the norm_mode / dx_mode echoed in cddf_dict, so
+    files carrying the per-dex Mpc^-1 quantity still render correctly.
     """
     fig, ax = plt.subplots(figsize=(10, 7))
 
@@ -201,12 +203,18 @@ def plot_column_density_distribution(cddf_dict, redshift, output_path, title=Non
     ax.loglog(bin_centers[mask], f_N[mask], 'o-', color='coral',
               linewidth=2, markersize=5, label='Measured')
 
-    # Add power law fit if available
+    # Draw the fit only over the range it was fitted on, so the line cannot
+    # imply it constrains decades it never saw.
     if not np.isnan(beta):
-        fit_range = (np.log10(bin_centers) > 12) & (np.log10(bin_centers) < 16)
+        log_centers = np.log10(bin_centers)
+        # `or` rather than a .get default: these keys are present but None for
+        # CSVs that carry no config echo.
+        lo = cddf_dict.get('fit_log_N_min') or 12.0
+        hi = cddf_dict.get('fit_log_N_max') or 16.0
+        fit_range = (log_centers >= lo) & (log_centers <= hi)
         N_fit = bin_centers[fit_range]
-        # Normalize to data at N ~ 1e14
-        norm_idx = np.argmin(np.abs(bin_centers - 1e14))
+        # Normalise to the data at the centre of the fit range
+        norm_idx = np.argmin(np.abs(log_centers - 0.5 * (lo + hi)))
         if f_N[norm_idx] > 0:
             A_norm = f_N[norm_idx] / (bin_centers[norm_idx]**(-beta))
             f_fit = A_norm * N_fit**(-beta)
@@ -216,18 +224,27 @@ def plot_column_density_distribution(cddf_dict, redshift, output_path, title=Non
 
     # Formatting
     ax.set_xlabel(r'Column Density $N_{\rm HI}$ [cm$^{-2}$]', fontsize=14)
-    ax.set_ylabel(r'$f(N_{\rm HI})$ [Mpc$^{-1}$]', fontsize=14)
-    ax.set_xlim(1e12, 1e16)
-    
-    # Set sensible y-axis limits for normalized CDDF
-    # Typical range: 10^-3 to 10^3 Mpc^-1
+
+    # Units follow norm_mode: 1 gives f(N) = dn/dN dX in cm^2, which runs ~1e-12
+    # at log N ~ 13 down to ~1e-23 in the DLA tail and so needs its own limits;
+    # otherwise the per-dex Mpc^-1 quantity, which sits near unity.
+    per_dN = cddf_dict.get('norm_mode') == 1
+    ax.set_ylabel(r'$f(N_{\rm HI})$ [cm$^{2}$]' if per_dN
+                  else r'$f(N_{\rm HI})$ [Mpc$^{-1}$]', fontsize=14)
+
     if np.any(f_N > 0):
-        y_min = max(1e-5, np.min(f_N[f_N > 0]) / 10)
-        y_max = min(1e4, np.max(f_N[f_N > 0]) * 10)
-        ax.set_ylim(y_min, y_max)
+        positive = f_N[f_N > 0]
+        if per_dN:
+            ax.set_xlim(10.0 ** (cddf_dict.get('log_N_min') or 13.0), 1e19)
+            ax.set_ylim(positive.min() / 10, positive.max() * 10)
+        else:
+            ax.set_xlim(1e12, 1e16)
+            ax.set_ylim(max(1e-5, positive.min() / 10),
+                        min(1e4, positive.max() * 10))
     else:
+        ax.set_xlim(1e12, 1e16)
         ax.set_ylim(1e-3, 1e3)
-    
+
     ax.grid(True, alpha=0.3, which='both')
     ax.legend(fontsize=12)
 
@@ -239,9 +256,12 @@ def plot_column_density_distribution(cddf_dict, redshift, output_path, title=Non
     info_text = f"N_absorbers = {cddf_dict['n_absorbers']}\n"
     info_text += f"N_sightlines = {cddf_dict.get('n_sightlines', 'N/A')}\n"
     if 'dX' in cddf_dict and cddf_dict['dX'] > 0:
-        info_text += f"dX = {cddf_dict['dX']:.1f} Mpc\n"
+        info_text += (f"X = {cddf_dict['dX']:.4f}\n" if cddf_dict.get('dx_mode') == 1
+                      else f"dX = {cddf_dict['dX']:.1f} Mpc\n")
     if not np.isnan(beta):
         info_text += f"β = {beta:.2f}"
+    elif cddf_dict.get('saturated'):
+        info_text += "β: suppressed (saturated)"
     ax.text(0.05, 0.95, info_text, transform=ax.transAxes,
             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
             fontsize=10, verticalalignment='top')

@@ -5,9 +5,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python"
 
-# Derive the venv's python version and extension suffix instead of hardcoding
-# them -- they were pinned to 3.12 while the venv moved to 3.14, so make install
-# and the .so sync were both landing in the wrong place.
+# Derive the venv's python version and extension suffix rather than hardcoding
+# them, so make install and the .so sync follow the venv when it is upgraded.
 PY_TAG="$("$VENV_PYTHON" -c 'import sys; print("python%d.%d" % sys.version_info[:2])')"
 EXT_SUFFIX="$("$VENV_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("EXT_SUFFIX"))')"
 SITE_PACKAGES="$SCRIPT_DIR/.venv/lib/$PY_TAG/site-packages"

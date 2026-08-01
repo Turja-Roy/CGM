@@ -26,20 +26,69 @@ COMPARISON_DIR.mkdir(exist_ok=True)
 
 
 # Optical depth above which a pixel counts as "absorbing" when identifying
-# absorbers for the CDDF and the b-parameter distribution.
+# contiguous absorption features. Governs the b-parameter / line-width
+# distribution and the metal lines; the CDDF uses fixed cells and needs no
+# threshold.
 #
 # WARNING: TAU_THRESHOLD_HI = 0.5 is an inherited constant with no published
-# justification -- it dates from the first commit and was never revisited. It is
-# not a neutral choice: tau > 0.5 means F < 0.607, so for an unsaturated Lya line
-# (tau_0 = 7.58e-8 N_HI / b) the absorber catalogue is effectively empty below
-# log N_HI ~ 13.0 (b = 15 km/s) to 13.4 (b = 40 km/s), which is roughly the lower
-# half of the fitted range and biases beta low. At z >~ 3 the opposite problem
-# dominates: contiguous tau > 0.5 runs merge across the saturated forest and are
-# counted as one absorber. Quantified in docs/cddf_check/ -- treat it as a
-# systematic to be quoted, not a hidden default.
+# justification. It is not a neutral choice: tau > 0.5 means F < 0.607, so for
+# an unsaturated Lya line (tau_0 = 7.58e-8 N_HI / b) the absorber catalogue is
+# effectively empty below log N_HI ~ 13.0 (b = 15 km/s) to 13.4 (b = 40 km/s).
+# At z >~ 3 the opposite problem dominates: contiguous tau > 0.5 runs merge
+# across the saturated forest and are counted as one absorber -- at z = 6 every
+# sightline collapses to a single feature at every threshold tested. Treat it as
+# a systematic to be quoted, not a hidden default.
 TAU_THRESHOLD_HI = 0.5
 TAU_THRESHOLD_METAL = 0.05
 TAU_THRESHOLD_VPFIT = 0.05
+
+
+# --------------------------------------------------------------------------
+# CDDF production configuration
+# --------------------------------------------------------------------------
+#   absorber_mode = 2 (fixed 50 km/s cells)
+#       Needs no tau threshold, and is half as sensitive to the fit window as
+#       per-feature deblending (beta spread 0.19-0.24 vs 0.50). Identical
+#       bin-for-bin to fake_spectra's line=False. The whole-sightline mode
+#       (line=True) is unusable at this box size -- beta = -1.8 at z = 2.
+#
+#   colden_mode = 1 (sum, not max)
+#       colden is a PER-PIXEL column density, so the reduction over an absorber
+#       must be a sum. max censors the high-N tail, which shows up as a beta
+#       nearly independent of both threshold and fit window.
+#
+#   dx_mode = 1 (absorption distance X(z)), norm_mode = 1 (per linear dN)
+#       Together these give f(N) = dn/dN dX in cm^2, the quantity the literature
+#       quotes. A z-independent comoving dX puts a spurious (1+z)^2 into the
+#       CDDF's redshift evolution; dividing by dex fits beta_true - 1.
+#
+#   grid 13.0 -> 22.8 in 49 bins == fake_spectra's default 0.2 dex grid.
+#   min_N_gate = 0 -- fake_spectra applies no low-N gate.
+#
+#   fit window [13.5, 15.0]
+#       Defensible only because cells removed the threshold. A floor below ~13.5
+#       sits inside the completeness turnover; a ceiling above ~15 runs out of
+#       populated bins.
+CDDF_OPTIONS = {
+    'absorber_mode': 2,
+    'cell_dv': 50.0,
+    'colden_mode': 1,
+    'dx_mode': 1,
+    'norm_mode': 1,
+    'log_N_min': 13.0,
+    'log_N_max': 22.8,
+    'n_bins': 49,
+    'fit_log_N_min': 13.5,
+    'fit_log_N_max': 15.0,
+    'min_N_gate': 0.0,
+}
+
+# Above this redshift the Lya forest is saturated and no absorber definition
+# recovers a physical CDDF slope (at z = 6, 50 km/s cells give beta = -3.3).
+# beta_fit is reported as NaN there rather than as a number that would silently
+# enter a plot. tau_eff and the flux PDF are unaffected, as neither depends on
+# absorber identification.
+CDDF_SATURATED_REDSHIFT = 4.5
 
 
 # CAMEL simulation suites available

@@ -127,15 +127,52 @@ def save_cddf_csv(cddf_dict, output_path):
         # Write metadata as comment
         if 'n_sightlines' in cddf_dict:
             f.write(f"# n_sightlines = {cddf_dict['n_sightlines']}\n")
+
+        # dx_mode = 1 makes dX the dimensionless absorption distance X(z), not a
+        # comoving length. Both are echoed when available.
+        dx_mode = cddf_dict.get('dx_mode')
         if 'dX' in cddf_dict:
-            f.write(f"# dX = {cddf_dict['dX']:.6f} Mpc (comoving)\n")
+            if dx_mode == 1:
+                f.write(f"# X = {cddf_dict['dX']:.6e} (absorption distance, dimensionless)\n")
+            else:
+                f.write(f"# dX = {cddf_dict['dX']:.6f} Mpc (comoving)\n")
+        if 'dX_comoving_mpc' in cddf_dict:
+            f.write(f"# dX_comoving_mpc = {cddf_dict['dX_comoving_mpc']:.6f}\n")
+        if 'X_absorption' in cddf_dict:
+            f.write(f"# X_absorption = {cddf_dict['X_absorption']:.6e}\n")
+
         if 'redshift' in cddf_dict:
             f.write(f"# redshift = {cddf_dict['redshift']:.6f}\n")
         if 'n_absorbers' in cddf_dict:
             f.write(f"# n_absorbers = {cddf_dict['n_absorbers']}\n")
+
+        # Configuration echo, so a CDDF file is self-describing and files written
+        # under different settings cannot be silently compared. See
+        # config.CDDF_OPTIONS.
+        for key in ('absorber_mode', 'cell_dv', 'colden_mode', 'norm_mode',
+                    'log_N_min', 'log_N_max', 'n_bins',
+                    'fit_log_N_min', 'fit_log_N_max', 'min_N_gate'):
+            if key in cddf_dict:
+                f.write(f"# {key} = {cddf_dict[key]}\n")
+        if dx_mode is not None:
+            f.write(f"# dx_mode = {dx_mode}\n")
+
         if 'beta_fit' in cddf_dict and not np.isnan(cddf_dict['beta_fit']):
             f.write(f"# beta_fit = {cddf_dict['beta_fit']:.6f}\n")
-        f.write("# f_N_HI units: [Mpc^-1] (comoving)\n")
+        if cddf_dict.get('saturated'):
+            # beta_fit is deliberately absent here; consumers read it with
+            # .get(..., nan), so it degrades to "no fit".
+            f.write("# saturated = True  (forest saturated; beta_fit suppressed)\n")
+            raw = cddf_dict.get('beta_fit_raw')
+            if raw is not None and not np.isnan(raw):
+                f.write(f"# beta_fit_raw = {raw:.6f}  (DO NOT USE -- unphysical)\n")
+
+        # norm_mode = 1 gives true f(N) = dn/dN dX in cm^2; mode 0 gives the
+        # per-dex quantity N f(N) ln10, which fits to beta_true - 1.
+        if cddf_dict.get('norm_mode') == 1:
+            f.write("# f_N_HI units: [cm^2]  (f(N) = dn/dN dX)\n")
+        else:
+            f.write("# f_N_HI units: [Mpc^-1] (comoving)\n")
         f.write("#\n")
         
         # Write the data

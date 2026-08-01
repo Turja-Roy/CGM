@@ -30,6 +30,53 @@ from scripts.plotting import (
 from scripts.analysis import compute_column_density_distribution_vpfit
 
 
+_ABSORBER_LABELS = {
+    0: 'per-feature deblending (tau > threshold runs)',
+    1: 'whole sightline',
+    2: 'fixed 50 km/s cells (fake_spectra line=False)',
+}
+
+
+def _cddf_method_label():
+    mode = config.CDDF_OPTIONS['absorber_mode']
+    reduction = 'summed' if config.CDDF_OPTIONS['colden_mode'] == 1 else 'max'
+    label = _ABSORBER_LABELS.get(mode, f'mode {mode}')
+    if mode == 2:
+        label = f"fixed {config.CDDF_OPTIONS['cell_dv']:.0f} km/s cells (fake_spectra line=False)"
+    return f"Absorbers: {label}; N per absorber: {reduction} pixel colden"
+
+
+def _format_dX(cddf_dict):
+    """dx_mode = 1 returns the dimensionless absorption distance, not Mpc."""
+    if config.CDDF_OPTIONS['dx_mode'] == 1:
+        return f"X = {cddf_dict['dX']:.6f} (absorption distance, dimensionless)"
+    return f"dX = {cddf_dict['dX']:.2f} Mpc (comoving)"
+
+
+def _cddf_simple(tau, velocity_spacing, threshold, colden, redshift,
+                 box_size_ckpc_h, hubble, omega_m):
+    """Production CDDF: the C++ kernel under config.CDDF_OPTIONS.
+
+    Module level, not a closure, so ProcessPoolExecutor can pickle it. Above
+    config.CDDF_SATURATED_REDSHIFT the fitted slope is suppressed to NaN, with
+    the raw value kept as beta_fit_raw so the suppression stays auditable.
+
+    `threshold` is forwarded for signature compatibility; absorber_mode = 2
+    ignores it.
+    """
+    result = compute_column_density_distribution(
+        tau, velocity_spacing, threshold=threshold, colden=colden,
+        redshift=redshift, box_size_ckpc_h=box_size_ckpc_h,
+        hubble=hubble, omega_m=omega_m, **config.CDDF_OPTIONS)
+
+    saturated = redshift is not None and redshift > config.CDDF_SATURATED_REDSHIFT
+    result['saturated'] = saturated
+    if saturated:
+        result['beta_fit_raw'] = result['beta_fit']
+        result['beta_fit'] = float('nan')
+    return result
+
+
 def cmd_analyze(args):
     spectra_file = args.spectra_file
     max_sightlines = args.max_sightlines if hasattr(args, 'max_sightlines') else None
@@ -261,13 +308,13 @@ def cmd_analyze(args):
         
         if not skip_cddf:
             if cd_method == 'simple':
-                tasks.append(('cddf', compute_column_density_distribution,
+                tasks.append(('cddf', _cddf_simple,
                             tau, velocity_spacing, tau_threshold, colden, redshift, box_size_ckpc_h, hubble, omega_m))
             elif cd_method == 'vpfit':
                 tasks.append(('cddf_vpfit', compute_column_density_distribution_vpfit,
                             flux, wavelength, redshift, config.TAU_THRESHOLD_VPFIT))
             else:
-                tasks.append(('cddf', compute_column_density_distribution,
+                tasks.append(('cddf', _cddf_simple,
                             tau, velocity_spacing, tau_threshold, colden, redshift, box_size_ckpc_h, hubble, omega_m))
 
         if not skip_lwd:
@@ -305,9 +352,12 @@ def cmd_analyze(args):
             if cd_method == 'simple':
                 print(f"Identified {cddf_dict['n_absorbers']} absorbers")
                 if redshift and box_size_ckpc_h:
-                    print(f"Absorption path length: dX = {cddf_dict['dX']:.2f} Mpc (comoving)")
+                    print(f"Absorption path length: {_format_dX(cddf_dict)}")
                 if not np.isnan(cddf_dict.get('beta_fit', np.nan)):
                     print(f"Power law index β = {cddf_dict['beta_fit']:.2f}")
+                elif cddf_dict.get('saturated'):
+                    print(f"Power law fit: SUPPRESSED (z = {redshift:.2f} > "
+                          f"{config.CDDF_SATURATED_REDSHIFT}, forest saturated)")
             elif cd_method == 'vpfit':
                 print(f"Fitted {cddf_dict['n_absorbers']} absorbers")
         else:
@@ -335,16 +385,19 @@ def cmd_analyze(args):
             print(f"\n[4/8] Computing column density distribution f(N_HI) using {cd_method} method...")
 
             if cd_method == 'simple':
-                cddf_dict = compute_column_density_distribution(
-                    tau, velocity_spacing, threshold=tau_threshold, colden=colden,
-                    redshift=redshift, box_size_ckpc_h=box_size_ckpc_h,
-                    hubble=hubble, omega_m=omega_m)
-                print(f"Simple pixel optical depth method")
+                cddf_dict = _cddf_simple(
+                    tau, velocity_spacing, tau_threshold, colden,
+                    redshift, box_size_ckpc_h, hubble, omega_m)
+                print(f"{_cddf_method_label()}")
                 print(f"Identified {cddf_dict['n_absorbers']} absorbers")
                 if redshift and box_size_ckpc_h:
-                    print(f"Absorption path length: dX = {cddf_dict['dX']:.2f} Mpc (comoving)")
+                    print(f"Absorption path length: {_format_dX(cddf_dict)}")
                 if not np.isnan(cddf_dict.get('beta_fit', np.nan)):
                     print(f"Power law index β = {cddf_dict['beta_fit']:.2f}")
+                elif cddf_dict.get('saturated'):
+                    print(f"Power law fit: SUPPRESSED (z = {redshift:.2f} > "
+                          f"{config.CDDF_SATURATED_REDSHIFT}, forest saturated; "
+                          f"raw value would be {cddf_dict.get('beta_fit_raw', float('nan')):.2f})")
                 else:
                     print("Power law fit: insufficient data")
 
@@ -361,17 +414,15 @@ def cmd_analyze(args):
                 else:
                     print(f"  Error: {cddf_dict['error']}")
                     print("  Falling back to simple method...")
-                    cddf_dict = compute_column_density_distribution(
-                        tau, velocity_spacing, threshold=tau_threshold, colden=colden,
-                        redshift=redshift, box_size_ckpc_h=box_size_ckpc_h,
-                        hubble=hubble, omega_m=omega_m)
+                    cddf_dict = _cddf_simple(
+                        tau, velocity_spacing, tau_threshold, colden,
+                        redshift, box_size_ckpc_h, hubble, omega_m)
 
             else:
                 print(f"Unknown method '{cd_method}', using simple")
-                cddf_dict = compute_column_density_distribution(
-                    tau, velocity_spacing, threshold=tau_threshold, colden=colden,
-                    redshift=redshift, box_size_ckpc_h=box_size_ckpc_h,
-                    hubble=hubble, omega_m=omega_m)
+                cddf_dict = _cddf_simple(
+                    tau, velocity_spacing, tau_threshold, colden,
+                    redshift, box_size_ckpc_h, hubble, omega_m)
         else:
             print(f"\n[4/8] Skipping column density distribution (--skip-cddf)")
 

@@ -128,8 +128,18 @@ def load_results_from_csv(spectra_file):
             'beta_fit': cmeta.get('beta_fit', np.nan),
             'n_absorbers': int(cmeta.get('n_absorbers', 0)),
             'n_sightlines': int(cmeta['n_sightlines']) if 'n_sightlines' in cmeta else None,
-            'dX': cmeta.get('dX', np.nan),
+            # dx_mode = 1 writes the header key as "X", not "dX".
+            'dX': cmeta.get('dX', cmeta.get('X', np.nan)),
             'redshift': cmeta.get('redshift'),
+            # Carry the config echo through so plots pick the right units and so
+            # files written under different CDDF settings stay distinguishable.
+            # None for CSVs with no echo, i.e. the per-dex Mpc^-1 quantity.
+            'norm_mode': cmeta.get('norm_mode'),
+            'dx_mode': cmeta.get('dx_mode'),
+            'absorber_mode': cmeta.get('absorber_mode'),
+            'fit_log_N_min': cmeta.get('fit_log_N_min'),
+            'fit_log_N_max': cmeta.get('fit_log_N_max'),
+            'saturated': str(cmeta.get('saturated', '')).lower().startswith('true'),
         }
 
         # --- line widths (recompute summary stats from the b array) ---
@@ -387,19 +397,20 @@ def compare_simulations(spectra_files, labels=None, output_path=None):
         if cddf['n_absorbers'] > 0 and len(cddf['counts']) > 0:
             color = colors[i % len(colors)]
             
-            # Properly compute log-space normalization
             bin_centers = cddf['bin_centers']
             log_bin_centers = np.log10(bin_centers)
-            
-            # Get delta_log_N from cddf_dict or compute it
-            if 'delta_log_N' in cddf:
-                delta_log_N = cddf['delta_log_N'][0]  # Constant for logspace
-            else:
-                log_bins = np.log10(cddf['bins'])
-                delta_log_N = np.mean(np.diff(log_bins))
-            
-            # f(N) in units of dN/dlog10(N) per sightline
-            f_N = cddf['counts'] / (cddf['n_absorbers'] * delta_log_N)
+
+            # Use the f(N) the analysis computed and wrote to cddf.csv. The
+            # fallback normalises by absorber count rather than by sightlines
+            # and path length, so it is not f(N) and is only a last resort.
+            f_N = cddf.get('f_N')
+            if f_N is None or len(f_N) != len(bin_centers):
+                if 'delta_log_N' in cddf:
+                    delta_log_N = cddf['delta_log_N'][0]
+                else:
+                    delta_log_N = np.mean(np.diff(np.log10(cddf['bins'])))
+                f_N = cddf['counts'] / (cddf['n_absorbers'] * delta_log_N)
+            f_N = np.asarray(f_N)
             
             # Only plot non-zero bins
             mask = f_N > 0
@@ -407,16 +418,21 @@ def compare_simulations(spectra_files, labels=None, output_path=None):
                 ax.scatter(log_bin_centers[mask], f_N[mask],
                           s=30, alpha=0.6, color=color, label=res['label'])
                 
-                # Plot fit if available
+                # Plot the fit only over the range it was fitted on
                 if not np.isnan(cddf['beta_fit']):
-                    N_fit = np.logspace(12, 16, 100)
+                    lo = cddf.get('fit_log_N_min') or 12.0
+                    hi = cddf.get('fit_log_N_max') or 16.0
+                    N_fit = np.logspace(lo, hi, 100)
                     # Power law: f(N) = A * N^(-beta)
                     A_norm = f_N[mask].max() / (bin_centers[mask][np.argmax(f_N[mask])]**(-cddf['beta_fit']))
                     f_fit = A_norm * N_fit**(-cddf['beta_fit'])
                     ax.plot(np.log10(N_fit), f_fit, '--', color=color, alpha=0.5, linewidth=1.5)
-    
+
+    # Units follow norm_mode (see config.CDDF_OPTIONS).
+    per_dN = any((r.get('cddf') or {}).get('norm_mode') == 1 for r in all_results)
     ax.set_xlabel(r'$\log_{10}(N_{\rm HI} / {\rm cm}^{-2})$', fontsize=12)
-    ax.set_ylabel(r'$f(N_{\rm HI})$ [dN/d log$_{10}$ N]', fontsize=12)
+    ax.set_ylabel(r'$f(N_{\rm HI})$ [cm$^{2}$]' if per_dN
+                  else r'$f(N_{\rm HI})$ [dN/d log$_{10}$ N]', fontsize=12)
     ax.set_yscale('log')
     ax.set_title('Column Density Distribution', fontsize=13, fontweight='bold')
     ax.grid(True, alpha=0.3)

@@ -145,9 +145,9 @@ def compute_column_density_distribution(
 
     Uses colden (peak) method when available.
 
-    The mode arguments all default to the historical production behaviour, so an
-    unqualified call is unchanged. They exist so the CDDF systematics can be
-    swept without recompiling (see scripts/cddf_threshold_test.py):
+    The mode arguments select between absorber definitions and normalisations so
+    the CDDF systematics can be swept without recompiling. Production values live
+    in config.CDDF_OPTIONS; the defaults here are the unmodified legacy behaviour.
 
     absorber_mode  0 = contiguous run of pixels with tau > threshold (ours)
                    1 = whole sightline (fake_spectra column_density_function line=True)
