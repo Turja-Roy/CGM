@@ -18,4 +18,12 @@ module load fftw3/3.3.10
 
 source .venv/bin/activate
 
+source shell_scripts/timing.sh
+timing_context matter_pk all
+
+step_start matter_pk
 python scripts/matter_pk_test.py --data-root data/IllustrisTNG/1P --cosmo-csv data/IllustrisTNG/1P/CosmoAstroSeed_IllustrisTNG_L25n256_1P.csv --snaps 014,018,024,032,044,080 --ngrid 256 --out-dir plots/matter_pk_test
+rc=$?
+step_end $rc
+timing_total $rc
+exit $rc

@@ -35,6 +35,9 @@ fi
 
 SIMULATION="EX_${EX_NUM}"
 
+source shell_scripts/timing.sh
+timing_context "$SIMULATION" "$SNAP_NUM"
+
 echo "========================================"
 echo "SLURM Job Information (ANALYZE)"
 echo "========================================"
@@ -71,11 +74,15 @@ echo ""
 # Single process (--workers 1) so each stage threads across the whole node:
 # scipy FFT (power spectrum) + OpenMP C++ kernels (cddf/lwd/tdens).
 echo "[2/3] Analyzing spectra (OpenMP, ${SLURM_CPUS_ON_NODE:-128} threads)..."
+step_start analyze
 OMP_NUM_THREADS=${SLURM_CPUS_ON_NODE:-128} python analyze_spectra.py analyze "$SPECTRA_PATH" --workers 1
+rc=$?
+step_end $rc
 
-if [ $? -ne 0 ]; then
+if [ $rc -ne 0 ]; then
     echo ""
     echo "ERROR: Spectra analysis failed for $SIMULATION snap_$SNAP_NUM"
+    timing_total $rc
     exit 1
 fi
 
@@ -83,10 +90,14 @@ fi
 EXPLORE_OUT="output/explore/IllustrisTNG/EX/${SIMULATION}/snap_${SNAP_NUM}.txt"
 mkdir -p "$(dirname "$EXPLORE_OUT")"
 echo "[3/3] Saving spectra metadata..."
-python analyze_spectra.py explore "$SPECTRA_PATH" > "$EXPLORE_OUT" 2>&1 \
-    && echo "Saved spectra metadata to $EXPLORE_OUT" \
-    || echo "Warning: explore failed (see $EXPLORE_OUT)"
+step_start explore
+python analyze_spectra.py explore "$SPECTRA_PATH" > "$EXPLORE_OUT" 2>&1
+rc=$?
+step_end $rc
+[ $rc -eq 0 ] && echo "Saved spectra metadata to $EXPLORE_OUT" \
+              || echo "Warning: explore failed (see $EXPLORE_OUT)"
 
+timing_total 0
 echo ""
 echo "========================================"
 echo "ANALYZE done: $SIMULATION snap_$SNAP_NUM  ($(date))"

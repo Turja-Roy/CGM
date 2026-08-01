@@ -53,6 +53,9 @@ if [ -z "$SIMULATION" ] || [ -z "$SNAP_NUM" ]; then
     exit 1
 fi
 
+source shell_scripts/timing.sh
+timing_context "$SIMULATION" "$SNAP_NUM"
+
 echo "========================================"
 echo "Task $SLURM_ARRAY_TASK_ID: $SIMULATION snap_$SNAP_NUM on $(hostname)"
 echo "Started: $(date)"
@@ -79,8 +82,17 @@ if [ -z "$SPECTRA_PATH" ] || [ ! -f "$SPECTRA_PATH" ]; then
 fi
 
 echo "analyze: $SPECTRA_PATH"
+step_start analyze
 OMP_NUM_THREADS=${SLURM_CPUS_ON_NODE:-128} python analyze_spectra.py analyze "$SPECTRA_PATH" --workers 1
-[ $? -ne 0 ] && { echo "ERROR: analyze failed ($SIMULATION snap_$SNAP_NUM)"; exit 1; }
+rc=$?
+step_end $rc
+if [ $rc -ne 0 ]; then
+    echo "ERROR: analyze failed ($SIMULATION snap_$SNAP_NUM)"
+    timing_total $rc
+    exit 1
+fi
+
+timing_total 0
 
 echo "========================================"
 echo "$SIMULATION snap_$SNAP_NUM done: $(date)"

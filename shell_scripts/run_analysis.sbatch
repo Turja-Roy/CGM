@@ -57,6 +57,9 @@ if [ -z "$SIMULATION" ]; then
     exit 1
 fi
 
+source shell_scripts/timing.sh
+timing_context "$SIMULATION" "$SNAP_NUM"
+
 echo "Processing simulation: $SIMULATION"
 echo "========================================"
 echo ""
@@ -102,13 +105,17 @@ echo ""
 echo "[2/3] Generating spectra (OpenMP, ${SLURM_CPUS_ON_NODE:-128} threads)..."
 echo "Command: OMP_NUM_THREADS=${SLURM_CPUS_ON_NODE:-128} python analyze_spectra.py generate '$SNAPSHOT_PATH' $SIGHTLINES_ARG -n $N_SIGHTLINES"
 
+step_start generate
 OMP_NUM_THREADS=${SLURM_CPUS_ON_NODE:-128} python analyze_spectra.py generate "$SNAPSHOT_PATH" \
     $SIGHTLINES_ARG \
     -n $N_SIGHTLINES
+rc=$?
+step_end $rc
 
-if [ $? -ne 0 ]; then
+if [ $rc -ne 0 ]; then
     echo ""
     echo "ERROR: Spectra generation failed for $SIMULATION"
+    timing_total $rc
     exit 1
 fi
 
@@ -124,14 +131,19 @@ echo "[3/3] Analyzing spectra (OpenMP, ${SLURM_CPUS_ON_NODE:-128} threads)..."
 echo "Command: OMP_NUM_THREADS=${SLURM_CPUS_ON_NODE:-128} python analyze_spectra.py analyze '$SPECTRA_PATH' --workers 1"
 echo ""
 
+step_start analyze
 OMP_NUM_THREADS=${SLURM_CPUS_ON_NODE:-128} python analyze_spectra.py analyze "$SPECTRA_PATH" --workers 1
+rc=$?
+step_end $rc
 
-if [ $? -ne 0 ]; then
+if [ $rc -ne 0 ]; then
     echo ""
     echo "ERROR: Spectra analysis failed for $SIMULATION"
+    timing_total $rc
     exit 1
 fi
 
+timing_total 0
 echo ""
 echo "========================================"
 echo "Simulation $SIMULATION completed successfully!"

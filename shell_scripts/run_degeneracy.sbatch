@@ -99,19 +99,26 @@ fi
 echo "Virtual environment activated"
 echo ""
 
+source shell_scripts/timing.sh
+timing_context "$SIMULATION" "$SNAP_NUM"
+
 # Step 1: Generate spectra
 # Single process; fake_spectra's C kernel threads across the node via OpenMP.
 # OMP_NUM_THREADS is scoped to this command so it does not oversubscribe the
 # multiprocessing pool in the analyze step below.
 echo "[2/3] Generating spectra (OpenMP, ${SLURM_CPUS_ON_NODE:-128} threads)..."
 
+step_start generate
 OMP_NUM_THREADS=${SLURM_CPUS_ON_NODE:-128} python analyze_spectra.py generate "$SNAPSHOT_PATH" \
     $SIGHTLINES_ARG \
     -n $N_SIGHTLINES
+rc=$?
+step_end $rc
 
-if [ $? -ne 0 ]; then
+if [ $rc -ne 0 ]; then
     echo ""
     echo "ERROR: Spectra generation failed for $SIMULATION"
+    timing_total $rc
     exit 1
 fi
 
@@ -126,21 +133,29 @@ echo ""
 echo "[3/3] Analyzing spectra (OpenMP, ${SLURM_CPUS_ON_NODE:-128} threads)..."
 echo ""
 
+step_start analyze
 OMP_NUM_THREADS=${SLURM_CPUS_ON_NODE:-128} python analyze_spectra.py analyze "$SPECTRA_PATH" --workers 1
+rc=$?
+step_end $rc
 
-if [ $? -ne 0 ]; then
+if [ $rc -ne 0 ]; then
     echo ""
     echo "ERROR: Spectra analysis failed for $SIMULATION"
+    timing_total $rc
     exit 1
 fi
 
 # Save spectra structure/metadata (light) so it survives spectra/ cleanup.
 EXPLORE_OUT="output/explore/IllustrisTNG/1P/${SIMULATION}/snap_${SNAP_NUM}.txt"
 mkdir -p "$(dirname "$EXPLORE_OUT")"
-python analyze_spectra.py explore "$SPECTRA_PATH" > "$EXPLORE_OUT" 2>&1 \
-    && echo "Saved spectra metadata to $EXPLORE_OUT" \
-    || echo "Warning: explore failed (see $EXPLORE_OUT)"
+step_start explore
+python analyze_spectra.py explore "$SPECTRA_PATH" > "$EXPLORE_OUT" 2>&1
+rc=$?
+step_end $rc
+[ $rc -eq 0 ] && echo "Saved spectra metadata to $EXPLORE_OUT" \
+              || echo "Warning: explore failed (see $EXPLORE_OUT)"
 
+timing_total 0
 echo ""
 echo "========================================"
 echo "Simulation $SIMULATION (snap_$SNAP_NUM) completed successfully!"

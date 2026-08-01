@@ -39,6 +39,9 @@ fi
 
 SIMULATION="EX_${EX_NUM}"
 
+source shell_scripts/timing.sh
+timing_context "$SIMULATION" "$SNAP_NUM"
+
 echo "========================================"
 echo "SLURM Job Information (GENERATE)"
 echo "========================================"
@@ -83,16 +86,21 @@ echo ""
 # Generate spectra.
 # Single process; fake_spectra's C kernel threads across the node via OpenMP.
 echo "[2/2] Generating spectra (OpenMP, ${SLURM_CPUS_ON_NODE:-128} threads)..."
+step_start generate
 OMP_NUM_THREADS=${SLURM_CPUS_ON_NODE:-128} python analyze_spectra.py generate "$SNAPSHOT_PATH" \
     $SIGHTLINES_ARG \
     -n $N_SIGHTLINES
+rc=$?
+step_end $rc
 
-if [ $? -ne 0 ]; then
+if [ $rc -ne 0 ]; then
     echo ""
     echo "ERROR: Spectra generation failed for $SIMULATION snap_$SNAP_NUM"
+    timing_total $rc
     exit 1
 fi
 
+timing_total 0
 echo ""
 echo "========================================"
 echo "GENERATE done: $SIMULATION snap_$SNAP_NUM  ($(date))"
