@@ -12,3 +12,11 @@ moderate_absorption_frac,0.37249385581560973
 weak_absorption_frac,0.05554200252500728
 tau_eff_err,0.004158933793737836
 tau_eff_std,0.4158933793737836
+mean_flux_err,0.00038610413284758787
+mean_flux_std,0.03861041328475879
+n_sightlines,10000.0
+tau_eff_obs_target,0.8160743077493965
+mean_flux_target,0.44216405184357616
+tau_scale_factor,0.25671660560629084
+tau_eff_H_total,
+hi_fraction_eff,

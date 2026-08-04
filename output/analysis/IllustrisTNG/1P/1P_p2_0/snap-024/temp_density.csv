@@ -1,6 +1,8 @@
 # T0 = 11497.668619709995 K
 # gamma = 1.042982949200386
-# gamma_err = nan
+# gamma_err = 0.031053260600808437
+# T0_err = 1865.7860885061998 K
+# n_bins_fit = 25
 # n_pixels = 308849053
 log_density,log_temperature
 3.229321e-01,4.056661e+00
