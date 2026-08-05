@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 # Project root directory
@@ -257,6 +258,35 @@ def extract_simulation_info(filepath):
         'sim_name': sim_name,
         'snap_num': snap_num
     }
+
+
+def find_snapshot_file(spectra_file, data_root=None):
+    info = extract_simulation_info(spectra_file)
+
+    snap_num = info['snap_num']
+    if snap_num == 'unknown':
+        match = re.search(r'snap[_-](\d+)', Path(spectra_file).name)
+        if not match:
+            return None
+        snap_num = match.group(1)
+
+    root = Path(data_root) if data_root is not None else DATA_DIR
+    spectra_dir = Path(spectra_file).parent
+
+    candidates = []
+    if info['suite'] in CAMEL_SUITES:
+        candidates.append(root / info['suite'] / info['sim_set'] /
+                          info['sim_name'] / f'snap_{snap_num}.hdf5')
+    candidates += [
+        spectra_dir / f'snap_{snap_num}.hdf5',
+        spectra_dir / f'snap-{snap_num}.hdf5',
+        root / f'snap_{snap_num}.hdf5',
+    ]
+
+    for path in candidates:
+        if path.exists():
+            return path
+    return None
 
 
 def get_spectra_output_dir(snapshot_path, spectra_type='camel'):

@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-from matplotlib import cm
 from matplotlib.colors import LogNorm
 
 
@@ -67,7 +66,7 @@ def plot_multi_line_comparison(line_stats_list, redshift, output_path, title=Non
 
     ion_names = [stats['ion_name'] for stats in line_stats_list]
     n_ions = len(ion_names)
-    cmap = cm.get_cmap('tab10')
+    cmap = plt.get_cmap('tab10')
     colors = [cmap(i) for i in np.linspace(0, 1, n_ions)]
 
     # Panel 1: Number of absorbers (dN/dz)
@@ -240,17 +239,33 @@ def plot_column_density_distribution(cddf_dict, redshift, output_path, title=Non
                   else r'$f(N_{\rm HI})$ [Mpc$^{-1}$]', fontsize=14)
 
     if np.any(f_N > 0):
-        positive = f_N[f_N > 0]
         if per_dN:
-            ax.set_xlim(10.0 ** (cddf_dict.get('log_N_min') or 13.0), 1e19)
-            ax.set_ylim(positive.min() / 10, positive.max() * 10)
+            xlo, xhi = 10.0 ** (cddf_dict.get('log_N_min') or 13.0), 1e19
         else:
-            ax.set_xlim(1e12, 1e16)
-            ax.set_ylim(max(1e-5, positive.min() / 10),
-                        min(1e4, positive.max() * 10))
+            xlo, xhi = 1e12, 1e16
+        ax.set_xlim(xlo, xhi)
+        in_plot = f_N[(bin_centers >= xlo) & (bin_centers <= xhi)]
+        in_plot = in_plot[in_plot > 0]
+        if in_plot.size:
+            ax.set_ylim(in_plot.min() / 10, in_plot.max() * 10)
+        else:
+            ax.set_ylim(1e-3, 1e3)
     else:
         ax.set_xlim(1e12, 1e16)
         ax.set_ylim(1e-3, 1e3)
+
+    # if np.any(f_N > 0):
+    #     positive = f_N[f_N > 0]
+    #     if per_dN:
+    #         ax.set_xlim(10.0 ** (cddf_dict.get('log_N_min') or 13.0), 1e19)
+    #         ax.set_ylim(positive.min() / 10, positive.max() * 10)
+    #     else:
+    #         ax.set_xlim(1e12, 1e16)
+    #         ax.set_ylim(max(1e-5, positive.min() / 10),
+    #                     min(1e4, positive.max() * 10))
+    # else:
+    #     ax.set_xlim(1e12, 1e16)
+    #     ax.set_ylim(1e-3, 1e3)
 
     ax.grid(True, alpha=0.3, which='both')
     ax.legend(fontsize=12)
@@ -276,11 +291,27 @@ def plot_column_density_distribution(cddf_dict, redshift, output_path, title=Non
             info_text += f"β = {beta:.2f}"
     elif cddf_dict.get('saturated'):
         info_text += "β: suppressed (saturated)"
-    ax.text(0.05, 0.95, info_text, transform=ax.transAxes,
-            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
-            fontsize=10, verticalalignment='top')
+
+    ax.grid(True, alpha=0.3, which='both')
+    leg = ax.legend(fontsize=12, loc='upper right')
 
     plt.tight_layout()
+    fig.canvas.draw()
+
+    renderer = fig.canvas.get_renderer()
+    leg_bb = leg.get_window_extent(renderer)
+    ax_bb = ax.get_window_extent(renderer)
+    ax.text((leg_bb.x0 - ax_bb.x0) / ax_bb.width + 0.01,
+            (leg_bb.y0 - ax_bb.y0) / ax_bb.height - 0.02,
+            info_text, transform=ax.transAxes, verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
+            fontsize=10)
+
+    # ax.text(0.05, 0.95, info_text, transform=ax.transAxes,
+    #         bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
+    #         fontsize=10, verticalalignment='top')
+    #
+    # plt.tight_layout()
     save_plot(fig, output_path)
     plt.close()
 
@@ -441,6 +472,170 @@ def plot_temperature_density_relation(tdens_dict, redshift, output_path, title=N
     plt.tight_layout()
     save_plot(fig, output_path)
     plt.close()
+
+
+def plot_flux_statistics(pdf_dict, stats, output_path, flux=None, tau=None,
+                         mean_flux_std=None, mean_flux_err=None, title=None):
+    """The 2x2 flux-statistics figure.
+
+    Panels 1 and 2 (flux PDF, log tau PDF) come from pdf_dict, which is exactly
+    what compute_flux_tau_pdf returns and what flux_pdf.csv / tau_pdf.csv are
+    written from -- so they replot from the CSVs alone.
+
+    Panels 3 and 4 are per-sightline and need the raw arrays. Pass flux and tau
+    to draw them; omit both (the CSV-only path, once the spectra HDF5 is gone)
+    and they render as labelled placeholders rather than being silently dropped,
+    keeping the layout comparable across the two paths.
+
+    mean_flux_std / mean_flux_err default to the matching keys in stats, which
+    analyze only stashes there at export time -- hence the explicit arguments.
+    """
+    import scripts.config as config
+
+    if mean_flux_std is None:
+        mean_flux_std = stats.get('mean_flux_std', np.nan)
+    if mean_flux_err is None:
+        mean_flux_err = stats.get('mean_flux_err', np.nan)
+
+    fig, axes = plt.subplots(2, 2, figsize=config.FIGSIZE_QUAD)
+
+    # Exact PDFs, not the 1e5-of-1e8-pixel subsample this replaced.
+    ax = axes[0, 0]
+    if pdf_dict is not None and 'flux_bin_centers' in pdf_dict:
+        ax.errorbar(pdf_dict['flux_bin_centers'], pdf_dict['flux_density'],
+                    yerr=pdf_dict['flux_density_err'], fmt='o-', ms=3, lw=1.2,
+                    color='steelblue', ecolor='steelblue', capsize=2,
+                    label='PDF (Poisson errors)')
+        ax.axvline(stats['mean_flux'], color='red', linestyle='--',
+                   label=f"Mean = {stats['mean_flux']:.3f}")
+        ax.axvline(stats['median_flux'], color='orange', linestyle='--',
+                   label=f"Median = {stats['median_flux']:.3f}")
+        ax.set_yscale('log')
+        ax.legend(fontsize=8)
+    else:
+        ax.text(0.5, 0.5, 'No flux PDF available', ha='center', va='center',
+                transform=ax.transAxes, fontsize=11, color='gray')
+    ax.set_xlabel('Flux $F = e^{-\\tau}$')
+    ax.set_ylabel('Probability Density')
+    ax.set_title('Flux Distribution')
+    ax.grid(True, alpha=0.3)
+
+    ax = axes[0, 1]
+    if pdf_dict is not None and 'log_tau_bin_centers' in pdf_dict:
+        ax.errorbar(pdf_dict['log_tau_bin_centers'], pdf_dict['log_tau_density'],
+                    yerr=pdf_dict['log_tau_density_err'], fmt='o-', ms=3, lw=1.2,
+                    color='coral', ecolor='coral', capsize=2)
+        ax.axvline(np.log10(max(stats['median_tau'], 1e-30)), color='red',
+                   linestyle='--', label=f"Median = {stats['median_tau']:.3g}")
+        ax.set_yscale('log')
+        ax.legend(fontsize=8)
+        ax.set_title(r'Optical Depth Distribution'
+                     f"\n({pdf_dict['frac_tau_overflow']*100:.2f}% above grid, "
+                     f"{pdf_dict['frac_tau_zero']*100:.2f}% at $\\tau=0$)")
+    else:
+        ax.text(0.5, 0.5, 'No optical-depth PDF available', ha='center',
+                va='center', transform=ax.transAxes, fontsize=11, color='gray')
+        ax.set_title('Optical Depth Distribution')
+    ax.set_xlabel(r'$\log_{10} \tau$')
+    ax.set_ylabel('Probability Density')
+    ax.grid(True, alpha=0.3)
+
+    # Panel 3: Mean flux per sightline
+    ax = axes[1, 0]
+    if flux is not None:
+        mean_flux_per_los = flux.mean(axis=1)
+        ax.plot(mean_flux_per_los, marker='o',
+                linestyle='-', markersize=3, alpha=0.6)
+        ax.axhline(stats['mean_flux'], color='red',
+                   linestyle='--', label='Overall mean')
+        # Band: per-sightline spread. The ensemble mean is known ~100x better.
+        ax.axhspan(stats['mean_flux'] - mean_flux_std,
+                   stats['mean_flux'] + mean_flux_std,
+                   color='red', alpha=0.12,
+                   label=r'$\pm\sigma$ (per sightline)')
+        ax.set_xlabel('Sightline Index')
+        ax.set_ylabel('Mean Flux')
+        ax.set_title(f"Mean Flux per Sightline "
+                     f"($\\sigma/\\sqrt{{N}}$ = {mean_flux_err:.4f})")
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+    else:
+        _placeholder_panel(ax, 'Mean Flux per Sightline',
+                           'per-sightline mean flux')
+
+    # Panel 4: Transmission statistics
+    ax = axes[1, 1]
+    if flux is not None and tau is not None:
+        n_pixels = flux.shape[1]
+        transmitted_frac = (flux > 0.1).sum(axis=1) / n_pixels
+        saturated_frac = (tau > 5.0).sum(axis=1) / n_pixels
+
+        ax.scatter(transmitted_frac, saturated_frac, alpha=0.5, s=20)
+        ax.set_xlabel('Fraction with F > 0.1')
+        ax.set_ylabel('Fraction with tau > 5 (saturated)')
+        ax.set_title('Transmission vs Saturation')
+        ax.grid(True, alpha=0.3)
+    else:
+        _placeholder_panel(ax, 'Transmission vs Saturation',
+                           'per-pixel flux and tau')
+
+    if title:
+        fig.suptitle(title, fontsize=14)
+
+    plt.tight_layout()
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=config.PLOT_DPI, bbox_inches='tight')
+    plt.close(fig)
+
+
+def plot_snapshot_diagnostic(snapshot_path, output_path, stride=100, title=None):
+    """Gas projection and neutral-fraction histogram from a raw snapshot.
+
+    stride subsamples the particles. Note that the CAMELS snapshots store
+    PartType0 gzip-chunked, so a strided read still decompresses every chunk:
+    the cost is the full dataset regardless of stride, ~0.5 GB per snapshot.
+    """
+    import h5py
+
+    with h5py.File(snapshot_path, 'r') as f:
+        coords = f['PartType0/Coordinates'][::stride]
+        nH = f['PartType0/NeutralHydrogenAbundance'][::stride]
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+    h1 = axes[0].hist2d(coords[:, 0], coords[:, 1], bins=200,
+                        cmap='viridis', cmin=0)
+    axes[0].set_xlabel('X [ckpc/h]')
+    axes[0].set_ylabel('Y [ckpc/h]')
+    axes[0].set_title('Gas Density Projection (xy plane)')
+    plt.colorbar(h1[3], ax=axes[0], label='N particles per bin')
+
+    axes[1].hist(np.log10(nH + 1e-10), bins=100, color='steelblue',
+                 edgecolor='black', alpha=0.7)
+    axes[1].set_xlabel('log10(Neutral Fraction)')
+    axes[1].set_ylabel('Count')
+    axes[1].set_title('Neutral Hydrogen Distribution')
+    axes[1].grid(alpha=0.3)
+
+    if title:
+        fig.suptitle(title, fontsize=14)
+
+    plt.tight_layout()
+    save_plot(fig, output_path)
+    plt.close(fig)
+
+    return coords.shape[0]
+
+
+def _placeholder_panel(ax, title, needed):
+    """Empty axes stating what data the panel would have needed."""
+    ax.text(0.5, 0.5, f'Not reproducible from CSVs\n(needs {needed})',
+            ha='center', va='center', transform=ax.transAxes,
+            fontsize=10, color='gray')
+    ax.set_title(title)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.grid(False)
 
 
 #########################################

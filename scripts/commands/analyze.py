@@ -28,6 +28,7 @@ from scripts.plotting import (
     plot_line_width_distribution,
     plot_temperature_density_relation,
     plot_multi_line_comparison,
+    plot_flux_statistics,
 )
 
 from scripts.analysis import compute_column_density_distribution_vpfit
@@ -703,79 +704,11 @@ def cmd_analyze(args):
     print("\n[7/8] Creating detailed statistics plots...")
 
     try:
-        import matplotlib.pyplot as plt
-
-        # Flux distribution
-        fig, axes = plt.subplots(2, 2, figsize=config.FIGSIZE_QUAD)
-
-        # Exact PDFs, not the 1e5-of-1e8-pixel subsample this replaced.
-        ax = axes[0, 0]
-        ax.errorbar(pdf_dict['flux_bin_centers'], pdf_dict['flux_density'],
-                    yerr=pdf_dict['flux_density_err'], fmt='o-', ms=3, lw=1.2,
-                    color='steelblue', ecolor='steelblue', capsize=2,
-                    label='PDF (Poisson errors)')
-        ax.axvline(stats['mean_flux'], color='red', linestyle='--',
-                   label=f"Mean = {stats['mean_flux']:.3f}")
-        ax.axvline(stats['median_flux'], color='orange', linestyle='--',
-                   label=f"Median = {stats['median_flux']:.3f}")
-        ax.set_xlabel('Flux $F = e^{-\\tau}$')
-        ax.set_ylabel('Probability Density')
-        ax.set_title('Flux Distribution')
-        ax.set_yscale('log')
-        ax.legend(fontsize=8)
-        ax.grid(True, alpha=0.3)
-
-        ax = axes[0, 1]
-        ax.errorbar(pdf_dict['log_tau_bin_centers'], pdf_dict['log_tau_density'],
-                    yerr=pdf_dict['log_tau_density_err'], fmt='o-', ms=3, lw=1.2,
-                    color='coral', ecolor='coral', capsize=2)
-        ax.axvline(np.log10(max(stats['median_tau'], 1e-30)), color='red',
-                   linestyle='--', label=f"Median = {stats['median_tau']:.3g}")
-        ax.set_xlabel(r'$\log_{10} \tau$')
-        ax.set_ylabel('Probability Density')
-        ax.set_title(r'Optical Depth Distribution'
-                     f"\n({pdf_dict['frac_tau_overflow']*100:.2f}% above grid, "
-                     f"{pdf_dict['frac_tau_zero']*100:.2f}% at $\\tau=0$)")
-        ax.set_yscale('log')
-        ax.legend(fontsize=8)
-        ax.grid(True, alpha=0.3)
-
-        # Panel 3: Mean flux per sightline
-        ax = axes[1, 0]
-        mean_flux_per_los = flux.mean(axis=1)
-        ax.plot(mean_flux_per_los, marker='o',
-                linestyle='-', markersize=3, alpha=0.6)
-        ax.axhline(stats['mean_flux'], color='red',
-                   linestyle='--', label='Overall mean')
-        # Band: per-sightline spread. The ensemble mean is known ~100x better.
-        ax.axhspan(stats['mean_flux'] - tau_eff_dict['mean_flux_std'],
-                   stats['mean_flux'] + tau_eff_dict['mean_flux_std'],
-                   color='red', alpha=0.12,
-                   label=r'$\pm\sigma$ (per sightline)')
-        ax.set_xlabel('Sightline Index')
-        ax.set_ylabel('Mean Flux')
-        ax.set_title(f"Mean Flux per Sightline "
-                     f"($\\sigma/\\sqrt{{N}}$ = {tau_eff_dict['mean_flux_err']:.4f})")
-        ax.legend(fontsize=8)
-        ax.grid(True, alpha=0.3)
-
-        # Panel 4: Transmission statistics
-        ax = axes[1, 1]
-        transmitted_frac = (flux > 0.1).sum(axis=1) / \
-            n_pixels  # Fraction with F > 0.1
-        saturated_frac = (tau > 5.0).sum(axis=1) / \
-            n_pixels     # Fraction with tau > 5
-
-        ax.scatter(transmitted_frac, saturated_frac, alpha=0.5, s=20)
-        ax.set_xlabel('Fraction with F > 0.1')
-        ax.set_ylabel('Fraction with tau > 5 (saturated)')
-        ax.set_title('Transmission vs Saturation')
-        ax.grid(True, alpha=0.3)
-
-        plt.tight_layout()
         stats_file = config.get_plot_output_name(spectra_file, 'statistics')
-        plt.savefig(stats_file, dpi=config.PLOT_DPI, bbox_inches='tight')
-        plt.close()
+        plot_flux_statistics(
+            pdf_dict, stats, stats_file, flux=flux, tau=tau,
+            mean_flux_std=tau_eff_dict['mean_flux_std'],
+            mean_flux_err=tau_eff_dict['mean_flux_err'])
         print(f"  [d] Statistics: {stats_file}")
 
     except Exception as e:
@@ -786,63 +719,21 @@ def cmd_analyze(args):
     print("-" * 70)
     # Try to load the original snapshot file to create diagnostic plots
     try:
-        # Extract the snapshot filename from the spectra filename
-        # Typical spectra file: camel_lya_spectra_snap_080.hdf5
-        # We need to find: snap_080.hdf5
-        import re
-        match = re.search(r'snap[_-](\d+)', os.path.basename(spectra_file))
-        if match:
-            snap_num = match.group(1)
-            # Look for snapshot file in common locations
-            snapshot_dir = os.path.dirname(spectra_file)
-            possible_snapshot_paths = [
-                os.path.join(snapshot_dir, f'snap_{snap_num}.hdf5'),
-                os.path.join(snapshot_dir, f'snap-{snap_num}.hdf5'),
-                os.path.join(config.DATA_DIR, f'snap_{snap_num}.hdf5'),
-            ]
+        # Snapshots sit at data/{suite}/{sim_set}/{sim_name}/snap_{N}.hdf5. The
+        # lookup this replaced searched only the spectra directory and the data
+        # root, so it never once matched -- see config.find_snapshot_file.
+        snapshot_filepath = config.find_snapshot_file(spectra_file)
 
-            snapshot_filepath = None
-            for path in possible_snapshot_paths:
-                if os.path.exists(path):
-                    snapshot_filepath = path
-                    break
-
-            if snapshot_filepath:
-                print(f"Found snapshot: {snapshot_filepath}")
-
-                with h5py.File(snapshot_filepath, 'r') as f:
-                    # Load positions (subsample for speed)
-                    stride = 100  # Use every 100th particle
-                    coords = f['PartType0/Coordinates'][::stride]  # Shape: (N/100, 3)
-                    nH = f['PartType0/NeutralHydrogenAbundance'][::stride]
-                    print(f"Loaded {coords.shape[0]:,} particles (every {stride}th)")
-                    # Create projection plot
-                    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-                    # 2D histogram (density projection)
-                    h1 = axes[0].hist2d(coords[:, 0], coords[:, 1], bins=200,
-                                        cmap='viridis', cmin=0)
-                    axes[0].set_xlabel('X [ckpc/h]')
-                    axes[0].set_ylabel('Y [ckpc/h]')
-                    axes[0].set_title('Gas Density Projection (xy plane)')
-                    plt.colorbar(h1[3], ax=axes[0], label='N particles per bin')
-                    # Neutral hydrogen distribution
-                    axes[1].hist(np.log10(nH + 1e-10), bins=100, color='steelblue',
-                                 edgecolor='black', alpha=0.7)
-                    axes[1].set_xlabel('log10(Neutral Fraction)')
-                    axes[1].set_ylabel('Count')
-                    axes[1].set_title('Neutral Hydrogen Distribution')
-                    axes[1].grid(alpha=0.3)
-                    plt.tight_layout()
-                    # Save to appropriate subfolder
-                    diagnostic_file = config.get_plot_output_name(spectra_file, 'snapshot_diagnostic')
-                    plt.savefig(diagnostic_file, dpi=150, bbox_inches='tight')
-                    plt.close()
-                    print(f"Saved plot to {diagnostic_file}")
-            else:
-                print(f"Snapshot file not found (tried snap_{snap_num}.hdf5)")
-                print("Skipping diagnostic plots")
+        if snapshot_filepath:
+            print(f"Found snapshot: {snapshot_filepath}")
+            diagnostic_file = config.get_plot_output_name(
+                spectra_file, 'snapshot_diagnostic')
+            n_particles = plot_snapshot_diagnostic(
+                snapshot_filepath, diagnostic_file, stride=100)
+            print(f"Loaded {n_particles:,} particles (every 100th)")
+            print(f"Saved plot to {diagnostic_file}")
         else:
-            print("Could not determine snapshot number from filename")
+            print(f"Snapshot file not found for {os.path.basename(spectra_file)}")
             print("Skipping diagnostic plots")
     except Exception as e:
         print(f"Warning: Could not create diagnostic plots: {e}")
