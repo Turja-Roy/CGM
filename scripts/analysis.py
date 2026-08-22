@@ -202,8 +202,10 @@ KIM07_Z_MAX = 4.0
 def observed_tau_eff(redshift):
     """Observed tau_eff(z), NaN outside 1.7 < z < 4 rather than extrapolated.
 
-    Below z = 1.7 the right reference is HST/COS (Danforth et al. 2016), not this
-    power law; no value from it has been verified yet.
+    No low-z branch: checked 2026-08-22, neither Danforth+2016 (arXiv:1402.2655,
+    a dN/dz catalogue) nor Khaire+2019 (arXiv:1808.05605, P_F(k)) publishes a
+    tau_eff(z) fit. Both stop at z = 0.47 anyway, so snaps 050 (z=1.60) and 060
+    (z=1.05) would stay in a gap regardless -- don't bridge it by extrapolating.
     """
     if redshift is None or not np.isfinite(redshift):
         return float('nan')
@@ -268,6 +270,10 @@ def compute_temperature_density_relation(temperature, density, tau, min_tau=0.1)
     return analysis_cpp.compute_temperature_density_relation(temperature, density, tau, min_tau)
 
 
+# Mirrors src/cpp/analysis/constants.h:9. Keep the two in sync.
+TAU_TO_COLDEN_CONSTANT = 8.51e11  # cm^-2 / (km/s)
+
+
 def compute_metal_line_statistics(tau, velocity_spacing, ion_name='Metal', threshold=0.05, colden=None):
     """Compute statistics for metal line absorption systems."""
     n_sightlines, n_pixels = tau.shape
@@ -309,23 +315,22 @@ def compute_metal_line_statistics(tau, velocity_spacing, ion_name='Metal', thres
                 # End of feature
                 in_feature = False
                 
-                # Estimate column density (use peak, not sum)
+                # colden is per-pixel, so N is the sum over the absorber --
+                # column_density.cpp's COLDEN_SUM, i.e. colden_mode = 1.
                 if colden_line is not None:
-                    # Use fake_spectra's pre-computed values
-                    N_ion = np.max(colden_line[feature_start:j])
+                    N_ion = np.sum(colden_line[feature_start:j])
                 else:
-                    # Fallback: use generic constant (NEEDS VALIDATION!)
                     feature_tau = tau_line[feature_start:j]
-                    N_ion = 1e13 * np.sum(feature_tau) * velocity_spacing
+                    N_ion = TAU_TO_COLDEN_CONSTANT * np.sum(feature_tau) * velocity_spacing
                 column_densities.append(N_ion)
 
         # Handle case where feature extends to edge
         if in_feature:
             if colden_line is not None:
-                N_ion = np.max(colden_line[feature_start:])
+                N_ion = np.sum(colden_line[feature_start:])
             else:
                 feature_tau = tau_line[feature_start:]
-                N_ion = 1e13 * np.sum(feature_tau) * velocity_spacing
+                N_ion = TAU_TO_COLDEN_CONSTANT * np.sum(feature_tau) * velocity_spacing
             column_densities.append(N_ion)
 
     column_densities = np.array(column_densities)
