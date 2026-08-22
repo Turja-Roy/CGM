@@ -109,8 +109,18 @@ def plot_multi_line_comparison(line_stats_list, redshift, output_path, title=Non
     # Panel 4: Column density distributions (overlaid histograms)
     ax = axes[1, 1]
     for i, stats in enumerate(line_stats_list):
-        if len(stats['column_densities']) > 0:
+        # A tau>threshold feature can sit entirely on the Doppler wings of its
+        # neighbours, so every pixel in it has colden 0 and analysis.py's
+        # max() returns 0.0 -- log10 then gives -inf and hist() cannot build a
+        # range. The C++ CDDF drops these the same way, via its 1e12 bin floor.
+        with np.errstate(divide='ignore', invalid='ignore'):
             log_N = np.log10(stats['column_densities'])
+        n_bad = np.count_nonzero(~np.isfinite(log_N))
+        if n_bad:
+            print(f"  Warning: {stats['ion_name']}: dropped {n_bad} "
+                  f"non-positive column densities from histogram")
+        log_N = log_N[np.isfinite(log_N)]
+        if len(log_N) > 0:
             ax.hist(log_N, bins=20, alpha=0.5, label=stats['ion_name'],
                     color=colors[i], edgecolor='black', linewidth=0.5)
     ax.set_xlabel('log_10(N / cm^-2)', fontsize=12)

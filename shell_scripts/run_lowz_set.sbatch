@@ -5,7 +5,7 @@
 #SBATCH -p normal                  # Partition/queue (Lonestar6)
 #SBATCH -N 1                       # One whole node per task
 #SBATCH -n 48                      # Cores
-#SBATCH -t 48:00:00                # Time limit
+#SBATCH -t 04:00:00                # Time limit
 #SBATCH --array=1-60               # 10 sims (p1/p2) x 6 new snapshots
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=turja.roy@uta.edu
@@ -35,6 +35,11 @@
 # the snapshot load and the sightlines. Doing it as a second job would
 # pay the generate cost twice. Output file is therefore named
 # camel_lya_lya_h_spectra_snap_NNN_n10000.hdf5.
+#
+# Spectra are staged to node-local /tmp (288GB SSD, off the /work quota),
+# then symlinked into spectra/ so analyze resolves correct output paths
+# (suite/sim/snap from the link path). Both files are cleaned up on
+# success or failure. Existing analysis output dirs cause a full skip.
 #
 # PREREQUISITES (on the login node, BEFORE submitting):
 #   1. bash shell_scripts/download_lowz_snapshots.sh      # 50 x ~2.5 GB
@@ -81,8 +86,8 @@ module load fftw3/3.3.10
 source .venv/bin/activate || { echo "ERROR: venv activation failed"; exit 1; }
 
 SNAPSHOT_PATH="data/IllustrisTNG/1P/${SIMULATION}/snap_${SNAP_NUM}.hdf5"
-SPECTRA_DIR="spectra/IllustrisTNG/1P/${SIMULATION}"
-SPECTRA_PATH="${SPECTRA_DIR}/camel_lya_lya_h_spectra_snap_${SNAP_NUM}_n${N_SIGHTLINES}.hdf5"
+SPECTRA_PATH="/tmp/camel_lya_lya_h_spectra_snap_${SNAP_NUM}_n${N_SIGHTLINES}.hdf5"
+SPECTRA_LINK="spectra/IllustrisTNG/1P/${SIMULATION}/camel_lya_lya_h_spectra_snap_${SNAP_NUM}_n${N_SIGHTLINES}.hdf5"
 
 if [ ! -f "$SNAPSHOT_PATH" ]; then
     echo "ERROR: snapshot not found: $SNAPSHOT_PATH"
@@ -100,35 +105,48 @@ else
 fi
 
 # Step 1: generate spectra (single process; fake_spectra threads via OpenMP)
-if [ -f "$SPECTRA_PATH" ]; then
-    echo "[1/2] generate: SKIPPED, spectra file exists: $SPECTRA_PATH"
-else
-    echo "[1/2] generate: $SNAPSHOT_PATH  (lines: $LINES)"
-    step_start generate
-    OMP_NUM_THREADS=${SLURM_CPUS_ON_NODE:-128} python analyze_spectra.py generate "$SNAPSHOT_PATH" \
-        $SIGHTLINES_ARG \
-        --line "$LINES" \
-        -n $N_SIGHTLINES
-    rc=$?
-    step_end $rc
-    if [ $rc -ne 0 ]; then
-        echo "ERROR: generate failed ($SIMULATION snap_$SNAP_NUM)"
-        timing_total $rc
-        exit 1
-    fi
+ANALYSIS_OUT="output/analysis/IllustrisTNG/1P/${SIMULATION}/snap-${SNAP_NUM}"
+if [ -d "$ANALYSIS_OUT" ]; then
+    echo "[1/2] SKIPPED, already analyzed: $ANALYSIS_OUT"
+    exit 0
 fi
 
+rm -f "$SPECTRA_PATH" "$SPECTRA_LINK"
+
+echo "[1/2] generate: $SNAPSHOT_PATH  (lines: $LINES)"
+step_start generate
+OMP_NUM_THREADS=${SLURM_CPUS_ON_NODE:-128} python analyze_spectra.py generate "$SNAPSHOT_PATH" \
+    $SIGHTLINES_ARG \
+    --line "$LINES" \
+    -n $N_SIGHTLINES \
+    --output "$SPECTRA_PATH"
+rc=$?
+step_end $rc
+if [ $rc -ne 0 ]; then
+    echo "ERROR: generate failed ($SIMULATION snap_$SNAP_NUM)"
+    timing_total $rc
+    rm -f "$SPECTRA_PATH" "$SPECTRA_LINK"
+    exit 1
+fi
+
+# Stage link so analyze resolves suite/sim/snap from the spectra path.
+mkdir -p "$(dirname "$SPECTRA_LINK")"
+ln -sf "$SPECTRA_PATH" "$SPECTRA_LINK"
+
 # Step 2: analyze (single process; scipy FFT + OpenMP C++ kernels)
-echo "[2/2] analyze: $SPECTRA_PATH"
+echo "[2/2] analyze: $SPECTRA_LINK"
 step_start analyze
-OMP_NUM_THREADS=${SLURM_CPUS_ON_NODE:-128} python analyze_spectra.py analyze "$SPECTRA_PATH" --workers 1
+OMP_NUM_THREADS=${SLURM_CPUS_ON_NODE:-128} python analyze_spectra.py analyze "$SPECTRA_LINK" --workers 1
 rc=$?
 step_end $rc
 if [ $rc -ne 0 ]; then
     echo "ERROR: analyze failed ($SIMULATION snap_$SNAP_NUM)"
     timing_total $rc
+    rm -f "$SPECTRA_PATH" "$SPECTRA_LINK"
     exit 1
 fi
+
+rm -f "$SPECTRA_PATH" "$SPECTRA_LINK"
 
 timing_total 0
 

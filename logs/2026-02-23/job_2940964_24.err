@@ -1,3 +1,0 @@
-/work/11170/roy/CGM/scripts/plotting.py:347: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
-  plt.tight_layout()
-slurmstepd: error: *** JOB 2944060 ON c314-192 CANCELLED AT 2026-02-25T11:31:35 DUE TO TIME LIMIT ***

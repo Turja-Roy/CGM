@@ -5,7 +5,7 @@
 #SBATCH -p normal                    # Partition/queue (Lonestar6)
 #SBATCH -N 1                         # One whole node per task
 #SBATCH -n 48                        # Cores
-#SBATCH -t 08:00:00                  # Time limit
+#SBATCH -t 04:00:00                  # Time limit
 #SBATCH --array=1-40                 # 10 sims (p1/p2) x 4 existing snapshots
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=turja.roy@uta.edu
@@ -91,6 +91,8 @@ if [ $rc -ne 0 ]; then
     timing_total $rc
     exit 1
 fi
+
+rm -f "$SPECTRA_PATH"
 
 timing_total 0
 
