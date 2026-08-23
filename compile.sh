@@ -16,7 +16,7 @@ module load cmake gcc/13.2.0 impi/19.0.9 eigen/3.4.0 fftw3/3.3.10
 
 # Install the python dependencies (just in case they're not already installed)
 source .venv/bin/activate
-pip install h5py numpy matplotlib scipy scikit-learn pandas fake_spectra mpi4py pybind11
+pip install -r "$SCRIPT_DIR/requirements.txt"
 
 # Clean old build (to avoid stale CMake cache)
 BUILD_DIR="$SCRIPT_DIR/src/cpp/build"

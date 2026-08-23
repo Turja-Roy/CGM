@@ -1,0 +1,10 @@
+numpy>=2.0
+scipy>=1.14
+h5py>=3.11
+matplotlib>=3.9
+pandas>=2.2
+scikit-learn>=1.5
+astropy>=6.0
+fake_spectra>=2.2.6
+VoigtFit>=3.13          # analyze --cd-method vpfit
+pybind11>=2.12          # build-time, compile.sh
