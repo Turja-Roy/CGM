@@ -178,6 +178,50 @@ def load_cosmo_table(cosmo_csv):
 # Assemble per-variant data for one scan at one snap
 # =====================================================================
 
+def load_snap_row(d):
+    """Every CSV under one snap-XXX directory, as the row dict the observable
+    extractors expect. Knows nothing about which set or scan it came from, so
+    both the 1P scans and the EX set load through the same code path.
+
+    Missing files leave fields as np.nan rather than raising, so a hole shows up
+    in the figures instead of killing the run.
+    """
+    row = {'snap_dir': d}
+
+    td = load_temp_density(d / 'temp_density.csv')
+    row.update(td)
+
+    fs = load_flux_stats(d / 'flux_stats.csv')
+    row['mean_flux']  = fs.get('mean_flux',     np.nan)
+    row['tau_eff']    = fs.get('effective_tau', np.nan)
+    row['median_flux'] = fs.get('median_flux',  np.nan)
+    row['deep_frac']  = fs.get('deep_absorption_frac', np.nan)
+    row['weak_frac']  = fs.get('weak_absorption_frac', np.nan)
+    # _err is sigma/sqrt(N) on the ensemble value; _std is the per-sightline
+    # spread. Neither contains cosmic variance: one box, one realisation.
+    row['tau_eff_err']   = fs.get('tau_eff_err',   np.nan)
+    row['tau_eff_std']   = fs.get('tau_eff_std',   np.nan)
+    row['mean_flux_err'] = fs.get('mean_flux_err', np.nan)
+    row['mean_flux_std'] = fs.get('mean_flux_std', np.nan)
+    # NaN outside 1.7 < z < 4 (rescaling) or without the lya_h line.
+    row['tau_scale_factor'] = fs.get('tau_scale_factor', np.nan)
+    row['tau_eff_H_total']  = fs.get('tau_eff_H_total',  np.nan)
+    row['hi_fraction_eff']  = fs.get('hi_fraction_eff',  np.nan)
+
+    cddf_hdr, cddf_df = load_cddf(d / 'cddf.csv')
+    row['redshift']    = cddf_hdr.get('redshift',    np.nan)
+    row['dX_file']     = cddf_hdr.get('dX',          np.nan)
+    row['n_absorbers'] = cddf_hdr.get('n_absorbers', np.nan)
+    row['beta_fit']    = cddf_hdr.get('beta_fit',     np.nan)
+    row['beta_fit_err'] = cddf_hdr.get('beta_fit_err', np.nan)
+    row['cddf']        = cddf_df
+
+    row['power_spectrum'] = load_power_spectrum(d / 'power_spectrum.csv')
+    row['line_widths']    = load_line_widths(d / 'line_widths.csv')
+
+    return row
+
+
 def build_scan_frame(analysis_root, cosmo_table, scan, snap):
     """Return list of dicts, one per available variant, in the order n2..2.
 
@@ -191,8 +235,8 @@ def build_scan_frame(analysis_root, cosmo_table, scan, snap):
     rows = []
     for suffix in VARIANT_SUFFIXES:
         run_label = f'1P_{scan}_{suffix}'
-        d = snap_dir(analysis_root, scan, suffix, snap)
-        row = {
+        row = load_snap_row(snap_dir(analysis_root, scan, suffix, snap))
+        row.update({
             'suffix': suffix,
             'label': run_label,
             'scan': scan,
@@ -203,40 +247,7 @@ def build_scan_frame(analysis_root, cosmo_table, scan, snap):
             # every scan but p1 holds at the fiducial.
             'omega0': (cosmo_table.loc[run_label, 'Omega0']
                        if run_label in cosmo_table.index else np.nan),
-            'snap_dir': d,
-        }
-
-        td = load_temp_density(d / 'temp_density.csv')
-        row.update(td)
-
-        fs = load_flux_stats(d / 'flux_stats.csv')
-        row['mean_flux']  = fs.get('mean_flux',     np.nan)
-        row['tau_eff']    = fs.get('effective_tau', np.nan)
-        row['median_flux'] = fs.get('median_flux',  np.nan)
-        row['deep_frac']  = fs.get('deep_absorption_frac', np.nan)
-        row['weak_frac']  = fs.get('weak_absorption_frac', np.nan)
-        # _err is sigma/sqrt(N) on the ensemble value; _std is the per-sightline
-        # spread. Neither contains cosmic variance: one box, one realisation.
-        row['tau_eff_err']   = fs.get('tau_eff_err',   np.nan)
-        row['tau_eff_std']   = fs.get('tau_eff_std',   np.nan)
-        row['mean_flux_err'] = fs.get('mean_flux_err', np.nan)
-        row['mean_flux_std'] = fs.get('mean_flux_std', np.nan)
-        # NaN outside 1.7 < z < 4 (rescaling) or without the lya_h line.
-        row['tau_scale_factor'] = fs.get('tau_scale_factor', np.nan)
-        row['tau_eff_H_total']  = fs.get('tau_eff_H_total',  np.nan)
-        row['hi_fraction_eff']  = fs.get('hi_fraction_eff',  np.nan)
-
-        cddf_hdr, cddf_df = load_cddf(d / 'cddf.csv')
-        row['redshift']    = cddf_hdr.get('redshift',    np.nan)
-        row['dX_file']     = cddf_hdr.get('dX',          np.nan)
-        row['n_absorbers'] = cddf_hdr.get('n_absorbers', np.nan)
-        row['beta_fit']    = cddf_hdr.get('beta_fit',     np.nan)
-        row['beta_fit_err'] = cddf_hdr.get('beta_fit_err', np.nan)
-        row['cddf']        = cddf_df
-
-        row['power_spectrum'] = load_power_spectrum(d / 'power_spectrum.csv')
-        row['line_widths']    = load_line_widths(d / 'line_widths.csv')
-
+        })
         rows.append(row)
     return rows
 
