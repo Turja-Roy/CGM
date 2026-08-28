@@ -18,5 +18,5 @@ n_sightlines,10000.0
 tau_eff_obs_target,0.12714278068007295
 mean_flux_target,0.8806079298214535
 tau_scale_factor,0.2774042362465919
-tau_eff_H_total,
-hi_fraction_eff,
+tau_eff_H_total,inf
+hi_fraction_eff,0.0
