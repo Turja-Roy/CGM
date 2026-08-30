@@ -72,7 +72,7 @@ def plot_multi_line_comparison(line_stats_list, redshift, output_path, title=Non
     # Panel 1: Number of absorbers (dN/dz)
     ax = axes[0, 0]
     dN_dz_values = [stats['dN_dz'] for stats in line_stats_list]
-    bars = ax.bar(range(n_ions), dN_dz_values, color=colors,
+    ax.bar(range(n_ions), dN_dz_values,
                   edgecolor='black', alpha=0.7)
     ax.set_xticks(range(n_ions))
     ax.set_xticklabels(ion_names, rotation=45, ha='right')
@@ -84,7 +84,7 @@ def plot_multi_line_comparison(line_stats_list, redshift, output_path, title=Non
     ax = axes[0, 1]
     covering_fractions = [stats['covering_fraction']
                           * 100 for stats in line_stats_list]
-    bars = ax.bar(range(n_ions), covering_fractions,
+    ax.bar(range(n_ions), covering_fractions,
                   color=colors, edgecolor='black', alpha=0.7)
     ax.set_xticks(range(n_ions))
     ax.set_xticklabels(ion_names, rotation=45, ha='right')
@@ -98,7 +98,7 @@ def plot_multi_line_comparison(line_stats_list, redshift, output_path, title=Non
     # Use log scale if range is large
     if max(mean_taus) / min([t for t in mean_taus if t > 0] + [1]) > 100:
         ax.set_yscale('log')
-    bars = ax.bar(range(n_ions), mean_taus, color=colors,
+    ax.bar(range(n_ions), mean_taus, color=colors,
                   edgecolor='black', alpha=0.7)
     ax.set_xticks(range(n_ions))
     ax.set_xticklabels(ion_names, rotation=45, ha='right')
@@ -198,7 +198,6 @@ def plot_column_density_distribution(cddf_dict, redshift, output_path, title=Non
     """
     fig, ax = plt.subplots(figsize=(10, 7))
 
-    bins = cddf_dict['bins']
     counts = cddf_dict['counts']
     bin_centers = cddf_dict['bin_centers']
     beta = cddf_dict['beta_fit']
@@ -445,7 +444,7 @@ def plot_temperature_density_relation(tdens_dict, redshift, output_path, title=N
         im = ax.imshow(h, origin='lower', extent=extent, aspect='auto',
                        cmap='YlOrRd', norm=LogNorm(vmin=1, vmax=h.max()),
                        interpolation='nearest')
-        cbar = plt.colorbar(im, ax=ax, label='Number of pixels')
+        plt.colorbar(im, ax=ax, label='Number of pixels')
 
     if np.isfinite(T0) and np.isfinite(gamma):
         if log_rho is not None and len(log_rho) > 0:
@@ -454,7 +453,7 @@ def plot_temperature_density_relation(tdens_dict, redshift, output_path, title=N
             rho_range = np.linspace(-2, 2, 100)
         T_fit = np.log10(T0) + (gamma - 1) * rho_range
         ax.plot(rho_range, T_fit, 'b--', linewidth=3,
-                label=f'T = T_0(rho/rho_bar)^(gamma-1)')
+                label='T = T_0(rho/rho_bar)^(gamma-1)')
 
         fit_text = f'T_0 = {T0:.0f} K\ngamma = {gamma:.3f}'
         ax.text(0.05, 0.95, fit_text, transform=ax.transAxes,
@@ -656,7 +655,6 @@ def plot_power_spectrum_overlay(power_dicts, labels, output_path, redshift=None,
                                   fiducial_idx=None, title=None):
     """Plot power spectra from multiple simulations overlaid with optional ratio panel."""
     import matplotlib.pyplot as plt
-    from matplotlib import colors as mcolors
     import numpy as np
     
     setup_plot_style()
