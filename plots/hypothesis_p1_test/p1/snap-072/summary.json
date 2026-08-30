@@ -1,0 +1,127 @@
+{
+  "scan": "p1",
+  "snap": "snap-072",
+  "param": "Omega0",
+  "variants": [
+    {
+      "suffix": "n2",
+      "label": "1P_p1_n2",
+      "param_value": 0.1,
+      "omega0": 0.1,
+      "redshift": 0.53726,
+      "T0_K": 12626.616400443338,
+      "gamma": 1.0704139918189384,
+      "gamma_err": 0.04311227016166905,
+      "n_pixels_diffuse": 36298681.0,
+      "mean_flux": 0.9056458610739284,
+      "tau_eff": 0.0991069311702245,
+      "deep_absorption_frac": 0.0221212660028449,
+      "weak_absorption_frac": 0.9421770543823176,
+      "n_absorbers_cddf": 360000.0,
+      "dX_from_file_Mpc": NaN,
+      "dX_analytic_dzdX": 2.1025424492322253
+    },
+    {
+      "suffix": "n1",
+      "label": "1P_p1_n1",
+      "param_value": 0.2,
+      "omega0": 0.2,
+      "redshift": 0.53726,
+      "T0_K": 13786.973354604404,
+      "gamma": 1.1244836053402856,
+      "gamma_err": 0.0698628071101442,
+      "n_pixels_diffuse": 33331023.0,
+      "mean_flux": 0.9210350146504276,
+      "tau_eff": 0.0822572253708587,
+      "deep_absorption_frac": 0.0177429851191957,
+      "weak_absorption_frac": 0.9511248494500572,
+      "n_absorbers_cddf": 400000.0,
+      "dX_from_file_Mpc": NaN,
+      "dX_analytic_dzdX": 1.9126592160893845
+    },
+    {
+      "suffix": "0",
+      "label": "1P_p1_0",
+      "param_value": 0.3,
+      "omega0": 0.3,
+      "redshift": 0.53726,
+      "T0_K": 17534.600706044803,
+      "gamma": 1.147373739805657,
+      "gamma_err": 0.07943399867484932,
+      "n_pixels_diffuse": 31976198.0,
+      "mean_flux": 0.9341288875279992,
+      "tau_eff": 0.0681408550617673,
+      "deep_absorption_frac": 0.0131269246679229,
+      "weak_absorption_frac": 0.959201066323482,
+      "n_absorbers_cddf": 430000.0,
+      "dX_from_file_Mpc": NaN,
+      "dX_analytic_dzdX": 1.7663932611210953
+    },
+    {
+      "suffix": "1",
+      "label": "1P_p1_1",
+      "param_value": 0.4,
+      "omega0": 0.4,
+      "redshift": 0.53726,
+      "T0_K": 16347.983238993089,
+      "gamma": 1.156252065050396,
+      "gamma_err": 0.08342059668196894,
+      "n_pixels_diffuse": 29342427.0,
+      "mean_flux": 0.9456201329432774,
+      "tau_eff": 0.0559143413732883,
+      "deep_absorption_frac": 0.0086777186507595,
+      "weak_absorption_frac": 0.9705394858810402,
+      "n_absorbers_cddf": 460000.0,
+      "dX_from_file_Mpc": NaN,
+      "dX_analytic_dzdX": 1.6492531145847067
+    },
+    {
+      "suffix": "2",
+      "label": "1P_p1_2",
+      "param_value": 0.5,
+      "omega0": 0.5,
+      "redshift": 0.53726,
+      "T0_K": 26117.843824647836,
+      "gamma": 1.1272333750570107,
+      "gamma_err": 0.08878727138142876,
+      "n_pixels_diffuse": 25930136.0,
+      "mean_flux": 0.9552339234087311,
+      "tau_eff": 0.0457990225180458,
+      "deep_absorption_frac": 0.0068722879883641,
+      "weak_absorption_frac": 0.976234782433033,
+      "n_absorbers_cddf": 490000.0,
+      "dX_from_file_Mpc": NaN,
+      "dX_analytic_dzdX": 1.5527004640494613
+    }
+  ],
+  "fgpa_residual": {
+    "param_value": [
+      0.1,
+      0.2,
+      0.3,
+      0.4,
+      0.5
+    ],
+    "R_measured": [
+      1.4544421416547757,
+      1.2071645607660104,
+      1.0,
+      0.8205699990498198,
+      0.6721228032218056
+    ],
+    "R_fgpa_pred": [
+      1.4979026852441697,
+      1.2812947874013458,
+      1.0,
+      0.980623059530942,
+      0.6650759992604638
+    ],
+    "residual": [
+      0.970985736244735,
+      0.9421442845438539,
+      1.0,
+      0.8367843189842182,
+      1.010595486785236
+    ]
+  }
+}
