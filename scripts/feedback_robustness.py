@@ -1,5 +1,5 @@
 """
-Feedback robustness of the Lyman-alpha observables (Tier 1, CSV-only).
+Feedback robustness of the Lyman-alpha observables (CSV-only).
 
 Question: does extreme feedback move an observable as much as cosmology does?
 An observable that responds strongly to Omega_0 / sigma_8 but barely to feedback
@@ -72,41 +72,9 @@ import matplotlib.pyplot as plt
 
 # Same scripts/ dir, so a plain import works -- matches degeneracy_test.py.
 from hypothesis_test_p1 import load_snap_row, load_cosmo_table, _setup_style, _save
-from hypothesis_test_p1 import build_scan_frame, FIDUCIAL, VARIANT_SUFFIXES
+from hypothesis_test_p1 import build_scan_frame, FIDUCIAL
 from degeneracy_test import (_obs_extractors, _obs_error_extractors,
-                             cddf_value, cddf_slope, cddf_value_err, cddf_slope_err)
-
-# The CDDF low-N anchor moves from 13.0 to 13.5.
-#
-# degeneracy_test anchors cddf_lowN and cddf_slope at log N = 13.0, but the
-# production binning starts at log_N_min = 13.0 with 0.2 dex bins, so the first
-# BIN CENTRE is 13.111. cddf_value() refuses to extrapolate below x.min(), so
-# both observables come back NaN for every simulation -- silently, in the 1P
-# figures too. 13.5 is inside the grid and is already the CDDF fit floor
-# (see [[cddf-production-defaults]]: fit range 13.5-15), so it keeps the
-# low-N intent without extrapolating.
-#
-# Fixed here rather than in degeneracy_test because changing that module's
-# reference column would move already-published 1P figures. Worth fixing there
-# separately.
-CDDF_LO, CDDF_HI = 13.5, 15.0
-
-
-def _patched_obs_extractors():
-    e = dict(_obs_extractors())
-    _, lo_lbl, lo_log = e['cddf_lowN']
-    e['cddf_lowN'] = (lambda r: cddf_value(r['cddf'], CDDF_LO),
-                      rf'$f(N_{{\rm HI}}{{=}}10^{{{CDDF_LO}}})$', lo_log)
-    e['cddf_slope'] = (lambda r: cddf_slope(r['cddf'], CDDF_LO, CDDF_HI),
-                       rf'CDDF log-log slope ({CDDF_LO}$\to${CDDF_HI})', False)
-    return e
-
-
-def _patched_obs_error_extractors():
-    e = dict(_obs_error_extractors())
-    e['cddf_lowN'] = lambda r: cddf_value_err(r['cddf'], CDDF_LO)
-    e['cddf_slope'] = lambda r: cddf_slope_err(r['cddf'], CDDF_LO, CDDF_HI)
-    return e
+                             CDDF_LOWN, CDDF_HIGHN)
 
 
 EX_SIMS = ['EX_0', 'EX_1', 'EX_2', 'EX_3']
@@ -162,7 +130,7 @@ def n_distinct(vals):
 def is_upper_limit(spread, fid_val, fid_err):
     """True when the spread sits under the fiducial's own 1-sigma error.
 
-    ponytail: compares the range against a single member's error rather than
+    compares the range against a single member's error rather than
     propagating a max-minus-min error, which would need the member covariance.
     Deliberately conservative -- it flags marginal points, it does not price them.
     """
@@ -179,7 +147,7 @@ def is_upper_limit(spread, fid_val, fid_err):
 
 def ex_record(ex_root, snap):
     rows = [load_snap_row(Path(ex_root) / sim / snap) for sim in EX_SIMS]
-    extr, errs = _patched_obs_extractors(), _patched_obs_error_extractors()
+    extr, errs = _obs_extractors(), _obs_error_extractors()
     return {
         'snap': snap,
         'sims': list(EX_SIMS),
@@ -195,13 +163,13 @@ def ex_record(ex_root, snap):
 def cosmo_record(p1_root, cosmo, scan, snap):
     """One 1P scan at one snapshot, in the same shape as ex_record().
 
-    Deliberately NOT degeneracy_test.scan_record: that calls the unpatched
-    _obs_extractors internally, so its cddf_lowN and cddf_slope would come back
-    NaN at the 13.0 anchor while the EX numerator used 13.5. Numerator and
-    denominator have to be measured the same way or R is meaningless.
+    Not degeneracy_test.scan_record, which returns the cosmology-scan shape
+    (Omega0/sigma8/S8 per row) this script has no use for. Numerator and
+    denominator go through the same extractors either way, which is what keeps
+    R meaningful.
     """
     rows = build_scan_frame(Path(p1_root), cosmo, scan, snap)
-    extr, errs = _patched_obs_extractors(), _patched_obs_error_extractors()
+    extr, errs = _obs_extractors(), _obs_error_extractors()
     fid_idx = next((i for i, r in enumerate(rows) if r['suffix'] == FIDUCIAL), None)
     return {
         'scan': scan,
@@ -248,7 +216,7 @@ def gate(ex, cos, snaps):
 # =====================================================================
 
 def robustness_table(ex, cos, snaps):
-    extr = _patched_obs_extractors()
+    extr = _obs_extractors()
     out = {'snaps': list(snaps),
            'z': [float(ex[s]['z']) for s in snaps],
            'observables': {}}
@@ -276,7 +244,7 @@ def robustness_table(ex, cos, snaps):
 # =====================================================================
 
 def _obs_style():
-    names = list(_patched_obs_extractors())
+    names = list(_obs_extractors())
     return {n: (f'C{i}', 'os^vD<>p'[i % 8]) for i, n in enumerate(names)}
 
 
@@ -432,16 +400,15 @@ def self_test():
     ex0, ex1, ex2, ex3 = 0.0275900, 0.0261500, 0.0299493, 0.0258625
     assert abs(frac_spread([ex0, ex1, ex2, ex3]) - 0.148) < 0.002
 
-    # the patched CDDF anchors must actually be inside the production grid,
-    # otherwise cddf_lowN/cddf_slope silently return NaN the way the 13.0
-    # anchor does
-    assert CDDF_LO > 13.111, 'low-N anchor must clear the first bin centre'
-    assert set(_patched_obs_extractors()) == set(_obs_extractors())
-    assert set(_patched_obs_error_extractors()) == set(_obs_error_extractors())
+    # the CDDF anchors must be inside the production grid: the first bin
+    # centre is 13.111, and cddf_value refuses to extrapolate below it, so an
+    # anchor at or under that silently NaNs cddf_lowN and cddf_slope
+    assert CDDF_LOWN > 13.111, 'low-N anchor must clear the first bin centre'
+    assert CDDF_HIGHN > CDDF_LOWN
 
-    # numerator and denominator must use the SAME extractor set -- an anchor
-    # mismatch between EX and 1P silently NaNs every CDDF ratio
-    assert _patched_obs_extractors().keys() == _patched_obs_error_extractors().keys()
+    # numerator and denominator must use the SAME extractor set -- a mismatch
+    # between EX and 1P silently NaNs every CDDF ratio
+    assert _obs_extractors().keys() == _obs_error_extractors().keys()
 
     print('self-test OK')
 
