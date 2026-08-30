@@ -1,11 +1,33 @@
 """
-Tier 1 hypothesis test: does 'less Ω0 -> less feedback/reionization -> more HI'
-explain the p1 CDDF / tau_eff inversion in the 1P scan?
+Inversion hypothesis test: does 'less Omega_0 -> less feedback/reionization ->
+more HI' explain the p1 CDDF / tau_eff inversion in the 1P scan?
+
+Per-scan figures, all CSV-only:
+    thermal trend            T_0 and gamma against the scanned parameter
+    CDDF path-length control CDDF before/after dividing out dX/dz, so the
+                             geometric term cannot be mistaken for a gas signal
+    FGPA residual            measured tau_eff ratio minus the thermal+Hubble
+                             prediction (T0_fid/T0)^0.7 * (H_fid/H). What is left
+                             is the absorber population itself -- the quantity
+                             the inversion hypothesis is actually about, and the
+                             one thing here that is not just an amplitude
+    cross-scan direction     tau_eff and T_0 responses overlaid across p1, p2,
+                             p7, p8, p9, each normalised to its own fiducial
+    across-snapshot grids    one panel per snapshot, plus the geometry-divided
+                             delta-tau_eff figure (multiplying by E(z) separates
+                             a 1/H(z) geometric difference from a gas one)
+
+Dropped, and why:
+  * Doppler-b figures. line_width.cpp clamps b to [2, 80] km/s and 99.4% of the
+    measured values at z=4 sit exactly at that ceiling, so every variant returned
+    the same median. Restore once the deblender is fixed.
+  * Two-band flux-power plot. degeneracy_test.py plots the band RATIO, which is
+    the discriminating part; this one normalised each band to its own maximum and
+    threw the ratio away.
 
 Consumes the per-variant CSVs that `analyze_spectra.py analyze` already writes
 under output/analysis/<suite>/1P/1P_p{idx}_{n2,n1,0,1,2}/snap-{XXX}/:
-    cddf.csv, flux_stats.csv, power_spectrum.csv, temp_density.csv,
-    line_widths.csv  (snap-080 only)
+    cddf.csv, flux_stats.csv, power_spectrum.csv, temp_density.csv
 
 Reads the CosmoAstroSeed CSV to map variant label -> parameter value.
 
@@ -15,7 +37,7 @@ where these CSVs live. Run:
     python scripts/hypothesis_test_p1.py \\
         --analysis-root output/analysis/IllustrisTNG/1P \\
         --cosmo-csv data/IllustrisTNG/1P/CosmoAstroSeed_IllustrisTNG_L25n256_1P.csv \\
-        --snaps snap-080,snap-014 \\
+        --snaps snap-080,snap-044 \\
         --out-dir plots/hypothesis_p1_test
 
 The script is tolerant: if a file is missing for a given variant/snap, that
@@ -24,7 +46,6 @@ missing will never kill the whole run.
 """
 
 import argparse
-import csv
 import json
 import sys
 from pathlib import Path
@@ -39,18 +60,35 @@ import matplotlib.pyplot as plt
 # CosmoAstroSeed column that holds the varied value. Only p1..p5 here  #
 # because those are the ones relevant to the hypothesis.               #
 # -------------------------------------------------------------------- #
+_1P_MEMBERS = ['n2', 'n1', '0', '1', '2']   # fixed order; '0' is fiducial
+
 SCANS = {
-    'p1': {'column': 'Omega0',       'label': r'$\Omega_0$',       'direction_pred': 'down'},
-    'p2': {'column': 'sigma8',       'label': r'$\sigma_8$',       'direction_pred': 'down'},
-    'p7': {'column': 'OmegaBaryon',  'label': r'$\Omega_b$',       'direction_pred': 'up'},
-    'p8': {'column': 'HubbleParam',  'label': r'$h$',              'direction_pred': 'mild'},
-    'p9': {'column': 'n_s',          'label': r'$n_s$',            'direction_pred': 'down'},
+    'p1': {'column': 'Omega0',       'label': r'$\Omega_0$',       'direction_pred': 'down',
+           'name_fmt': '1P_p1_{s}', 'members': _1P_MEMBERS},
+    'p2': {'column': 'sigma8',       'label': r'$\sigma_8$',       'direction_pred': 'down',
+           'name_fmt': '1P_p2_{s}', 'members': _1P_MEMBERS},
+    'p7': {'column': 'OmegaBaryon',  'label': r'$\Omega_b$',       'direction_pred': 'up',
+           'name_fmt': '1P_p7_{s}', 'members': _1P_MEMBERS},
+    'p8': {'column': 'HubbleParam',  'label': r'$h$',              'direction_pred': 'mild',
+           'name_fmt': '1P_p8_{s}', 'members': _1P_MEMBERS},
+    'p9': {'column': 'n_s',          'label': r'$n_s$',            'direction_pred': 'down',
+           'name_fmt': '1P_p9_{s}', 'members': _1P_MEMBERS},
+    # The EX set: four sims at one cosmology (Omega_m=0.3, sigma_8=0.8, seed
+    # 13560); only A_SN1/A_AGN1 vary, so there is no parameter axis to scan.
+    # 'column': None makes param_value a 1-based ordinal, i.e. a categorical
+    # x-axis. EX_0 is the fiducial and sits at index 0, same as the 1P '0'.
+    'ex': {'column': None,           'label': 'feedback variant', 'direction_pred': 'mild',
+           'name_fmt': 'EX_{s}',    'members': ['0', '1', '2', '3']},
 }
 # direction_pred: predicted direction of tau_eff ratio when the parameter is
 # raised above fiducial, under the "structure-growth drives feedback" hypothesis.
 # 'down' = tau_eff falls (less HI). 'up' = tau_eff rises (more HI). 'mild' = small.
-VARIANT_SUFFIXES = ['n2', 'n1', '0', '1', '2']   # fixed order; '0' is fiducial
-FIDUCIAL = '0'
+VARIANT_SUFFIXES = _1P_MEMBERS   # 1P default, for callers that don't hold a scan
+FIDUCIAL = '0'                   # fiducial member of every scan, EX included
+
+
+def members(scan):
+    return SCANS[scan]['members']
 
 
 # =====================================================================
@@ -156,7 +194,7 @@ def dXdz(z, Omega_m):
 # =====================================================================
 
 def variant_dir(analysis_root, scan, suffix):
-    return analysis_root / f'1P_{scan}_{suffix}'
+    return analysis_root / SCANS[scan]['name_fmt'].format(s=suffix)
 
 
 def _param_label(rows):
@@ -169,9 +207,21 @@ def snap_dir(analysis_root, scan, suffix, snap):
 
 
 def load_cosmo_table(cosmo_csv):
-    df = pd.read_csv(cosmo_csv)
-    df = df.set_index('Name')
-    return df
+    """Name-indexed parameter table, from either CosmoAstroSeed format.
+
+    1P ships a comma-separated .csv; EX ships a whitespace-aligned .txt whose
+    header is commented out and whose columns are named Omega_m / sigma_8. Both
+    come back with the same index and the same Omega0 / sigma8 column names, so
+    everything downstream is format-blind.
+    """
+    first = Path(cosmo_csv).read_text().split('\n', 1)[0]
+    if ',' in first:
+        df = pd.read_csv(cosmo_csv)
+    else:
+        df = pd.read_csv(cosmo_csv, sep=r'\s+')
+        df.columns = [c.lstrip('#') for c in df.columns]
+        df = df.rename(columns={'Omega_m': 'Omega0', 'sigma_8': 'sigma8'})
+    return df.set_index('Name')
 
 
 # =====================================================================
@@ -233,16 +283,20 @@ def build_scan_frame(analysis_root, cosmo_table, scan, snap):
     """
     col = SCANS[scan]['column']
     rows = []
-    for suffix in VARIANT_SUFFIXES:
-        run_label = f'1P_{scan}_{suffix}'
+    for i, suffix in enumerate(members(scan)):
+        run_label = SCANS[scan]['name_fmt'].format(s=suffix)
         row = load_snap_row(snap_dir(analysis_root, scan, suffix, snap))
         row.update({
             'suffix': suffix,
             'label': run_label,
             'scan': scan,
             'param_label': SCANS[scan]['label'],
-            'param_value': (cosmo_table.loc[run_label, col]
-                            if run_label in cosmo_table.index else np.nan),
+            # A scan with no varied parameter (EX) gets a 1-based ordinal, so
+            # the categorical x still plots and dividing by the fiducial's
+            # value is 1.0 rather than a zero-division.
+            'param_value': (i + 1 if col is None else
+                            (cosmo_table.loc[run_label, col]
+                             if run_label in cosmo_table.index else np.nan)),
             # NOT param_value: E(z) and dX/dz need the real matter density, which
             # every scan but p1 holds at the fiducial.
             'omega0': (cosmo_table.loc[run_label, 'Omega0']
@@ -271,8 +325,8 @@ def _save(fig, path):
     print(f'  saved {path}')
 
 
-def plot_t1_1_thermal_trend(rows, out_path, snap_label):
-    """T1.1: T0, gamma, n_pixels vs the scanned parameter."""
+def plot_thermal_trend(rows, out_path, snap_label):
+    """Thermal trend: T0, gamma, n_pixels vs the scanned parameter."""
     plab = _param_label(rows)
     x   = np.array([r['param_value'] for r in rows], dtype=float)
     T0  = np.array([r['T0']          for r in rows], dtype=float)
@@ -306,13 +360,13 @@ def plot_t1_1_thermal_trend(rows, out_path, snap_label):
     ax1.set_title(f'TDR slope ({snap_label})')
     ax1.grid(alpha=0.3)
 
-    fig.suptitle('T1.1 — Thermal state of the diffuse IGM')
+    fig.suptitle('Thermal state vs parameter — Thermal state of the diffuse IGM')
     fig.tight_layout()
     _save(fig, out_path)
 
 
-def plot_t1_2_pathlength(rows, out_path, snap_label):
-    """T1.2: apply the analytic dX(Omega_0)/dX(fid) correction to each CDDF
+def plot_cddf_pathlength(rows, out_path, snap_label):
+    """CDDF path-length control: apply the analytic dX(Omega_0)/dX(fid) correction to each CDDF
     and show the ordering is preserved. Off the p1 scan Omega_0 is fixed, so the
     correction is 1 and the right panel reproduces the left -- no artefact.
     """
@@ -320,7 +374,7 @@ def plot_t1_2_pathlength(rows, out_path, snap_label):
     fid = next(r for r in rows if r['suffix'] == FIDUCIAL)
     z_fid = fid['redshift']
     if not np.isfinite(z_fid):
-        print('  [T1.2] fiducial redshift missing, skipping'); return
+        print('  [cddf-pathlength] fiducial redshift missing, skipping'); return
 
     dX_fid = dXdz(z_fid, fid['omega0'])
 
@@ -358,13 +412,13 @@ def plot_t1_2_pathlength(rows, out_path, snap_label):
         ax.set_title(title)
         ax.legend(fontsize=8, loc='best')
 
-    fig.suptitle(f'T1.2 — CDDF path-length control ({snap_label})')
+    fig.suptitle(f'CDDF path-length control — CDDF path-length control ({snap_label})')
     fig.tight_layout()
     _save(fig, out_path)
 
 
-def plot_t1_3_fgpa(rows, out_path, snap_label):
-    """T1.3: compare measured tau_eff ratio to the FGPA thermal-only prediction.
+def plot_fgpa_residual(rows, out_path, snap_label):
+    """FGPA residual: compare measured tau_eff ratio to the FGPA thermal-only prediction.
 
     FGPA: tau ~ Delta^(2-0.7(gamma-1)) * T0^-0.7 / H(z) * Gamma_HI^-1 * (Omega_b h^2)^2
     With Omega_b, h, Gamma_HI fixed (external UVB), the variant-to-variant ratio
@@ -376,7 +430,7 @@ def plot_t1_3_fgpa(rows, out_path, snap_label):
     """
     fid = next(r for r in rows if r['suffix'] == FIDUCIAL)
     if not np.isfinite(fid['T0']) or not np.isfinite(fid['tau_eff']):
-        print('  [T1.3] fiducial T0/tau_eff missing, skipping'); return
+        print('  [fgpa-residual] fiducial T0/tau_eff missing, skipping'); return
 
     plab = _param_label(rows)
     T0_fid = fid['T0']
@@ -411,7 +465,7 @@ def plot_t1_3_fgpa(rows, out_path, snap_label):
     ax.set_xlabel(plab)
     ax.set_ylabel('ratio to fiducial')
     ax.set_yscale('log')
-    ax.set_title(f'T1.3 — FGPA thermal-only vs. measured ({snap_label})')
+    ax.set_title(f'FGPA thermal-only vs measured — FGPA thermal-only vs. measured ({snap_label})')
     ax.grid(alpha=0.3, which='both')
     ax.legend()
     fig.tight_layout()
@@ -423,117 +477,39 @@ def plot_t1_3_fgpa(rows, out_path, snap_label):
             'residual': (R_meas / R_pred).tolist()}
 
 
-def plot_t1_4_power_spectrum_scale_split(rows, out_path, snap_label,
-                                          k_large_max=0.01, k_small_min=0.05):
-    """T1.4: integrate k*P(k) in a large-scale band and a small-scale band,
-    plot both vs parameter value."""
-    plab = _param_label(rows)
-    x = np.array([r['param_value'] for r in rows], dtype=float)
-    large, small = [], []
-    for r in rows:
-        ps = r['power_spectrum']
-        if ps is None:
-            large.append(np.nan); small.append(np.nan); continue
-        k = ps['k_s_per_km'].values
-        P = ps['P_k_mean_km_per_s'].values
-        kP = k * P
-        m_L = (k > 0) & (k <= k_large_max)
-        m_S = k >= k_small_min
-        _trapz = getattr(np, 'trapezoid', None) or np.trapz
-        large.append(_trapz(kP[m_L], k[m_L]) if m_L.sum() > 1 else np.nan)
-        small.append(_trapz(kP[m_S], k[m_S]) if m_S.sum() > 1 else np.nan)
-    large = np.array(large); small = np.array(small)
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(x, large / np.nanmax(large), 'o-', lw=2, ms=7,
-            label=rf'large-scale ($k \leq {k_large_max}$ s/km)')
-    ax.plot(x, small / np.nanmax(small), 's--', lw=2, ms=7,
-            label=rf'small-scale ($k \geq {k_small_min}$ s/km)')
-    ax.set_xlabel(plab)
-    ax.set_ylabel(r'$\int k P(k) dk$, normalized to max')
-    ax.set_title(f'T1.4 — Flux power in two k-bands ({snap_label})')
-    ax.grid(alpha=0.3)
-    ax.legend()
-    fig.tight_layout()
-    _save(fig, out_path)
-
-    return {'param_value': x.tolist(),
-            'large_scale_integral': large.tolist(),
-            'small_scale_integral': small.tolist()}
-
-
-def plot_t1_6_bparam(rows, out_path, snap_label):
-    """T1.6: b-parameter median + distribution vs the scanned parameter."""
-    plab = _param_label(rows)
-    x   = []
-    med = []
-    p25 = []
-    p75 = []
-    bs_by_var = []
-    for r in rows:
-        lw = r['line_widths']
-        if lw is None:
-            x.append(r['param_value']); med.append(np.nan)
-            p25.append(np.nan); p75.append(np.nan); bs_by_var.append(None); continue
-        b = lw['b_param_km_s'].values
-        b = b[np.isfinite(b) & (b > 0)]
-        x.append(r['param_value'])
-        med.append(np.median(b))
-        p25.append(np.percentile(b, 25))
-        p75.append(np.percentile(b, 75))
-        bs_by_var.append(b)
-
-    x = np.array(x, dtype=float)
-    med = np.array(med); p25 = np.array(p25); p75 = np.array(p75)
-
-    fig, (axL, axR) = plt.subplots(1, 2, figsize=(13, 5))
-
-    axL.plot(x, med, 'o-', lw=2, ms=8, label='median')
-    axL.fill_between(x, p25, p75, alpha=0.25, label='25–75 %')
-    axL.set_xlabel(plab)
-    axL.set_ylabel('b-parameter [km/s]')
-    axL.set_title(f'b-param vs {plab}')
-    axL.grid(alpha=0.3); axL.legend()
-
-    colors = plt.cm.viridis(np.linspace(0, 0.9, len(rows)))
-    for r, c, b in zip(rows, colors, bs_by_var):
-        if b is None or len(b) == 0:
-            continue
-        axR.hist(b, bins=np.linspace(0, 150, 80),
-                 histtype='step', lw=1.8, color=c,
-                 label=f"{r['suffix']} ({plab}={r['param_value']:.2f})",
-                 density=True)
-    axR.set_xlabel('b-parameter [km/s]')
-    axR.set_ylabel('density')
-    axR.set_title('b-param distributions')
-    axR.grid(alpha=0.3); axR.legend(fontsize=8)
-
-    fig.suptitle(f'T1.6 — Doppler b-parameter ({snap_label})')
-    fig.tight_layout()
-    _save(fig, out_path)
-
-    return {'param_value': x.tolist(),
-            'median_b': med.tolist(),
-            'p25_b': p25.tolist(),
-            'p75_b': p75.tolist()}
-
-
 # =====================================================================
-# Cross-parameter (T1.5)
+# Cross-parameter (cross-scan direction)
 # =====================================================================
 
-def plot_t1_5_cross_parameter(analysis_root, cosmo_table, snap, out_path):
-    """Overlay tau_eff(parameter) and T0(parameter) for all scans p1..p5,
-    each normalized to its own fiducial value. Same direction across scans
-    corroborates the feedback/structure-growth story."""
+def plot_cross_scan_direction(analysis_root, cosmo_table, snap, out_path,
+                              scans=None, out_dir_maker=None):
+    """Overlay tau_eff(parameter) and T0(parameter) for every scan that has a
+    real parameter axis, each normalised to its own fiducial. Same direction
+    across scans corroborates the feedback/structure-growth story.
+
+    Needs at least two such scans: the whole content is the comparison between
+    them. A categorical set such as EX has no parameter axis at all, so a run
+    restricted to it would otherwise write an empty figure and an empty summary
+    that look like a null result rather than an inapplicable test.
+    """
+    selected = list(scans) if scans else list(SCANS)
+    numeric = [s for s in selected if SCANS[s]['column'] is not None]
+    if len(numeric) < 2:
+        print(f'  [cross-scan] needs >= 2 selected scans with a numeric parameter '
+              f'axis (have {numeric}) -- skipping')
+        return {}
+    if out_dir_maker is not None:
+        out_dir_maker()
+
     fig, (axT, axTau) = plt.subplots(1, 2, figsize=(13, 5))
 
     summary = {}
-    for scan, meta in SCANS.items():
+    for scan in numeric:
+        meta = SCANS[scan]
         rows = build_scan_frame(analysis_root, cosmo_table, scan, snap)
         fid  = next((r for r in rows if r['suffix'] == FIDUCIAL), None)
         if fid is None or not np.isfinite(fid['tau_eff']):
-            print(f'  [T1.5] skip {scan}: fiducial tau_eff missing'); continue
+            print(f'  [cross-scan direction] skip {scan}: fiducial tau_eff missing'); continue
 
         x = np.array([r['param_value'] for r in rows], dtype=float)
         T = np.array([r['T0']          for r in rows], dtype=float)
@@ -561,7 +537,7 @@ def plot_t1_5_cross_parameter(analysis_root, cosmo_table, snap, out_path):
         ax.grid(alpha=0.3, which='both')
         ax.legend(fontsize=9)
 
-    fig.suptitle(f'T1.5 — direction of effect across parameter scans ({snap})')
+    fig.suptitle(f'cross-scan direction — direction of effect across parameter scans ({snap})')
     fig.tight_layout()
     _save(fig, out_path)
     return summary
@@ -573,13 +549,16 @@ def plot_t1_5_cross_parameter(analysis_root, cosmo_table, snap, out_path):
 # redshift evolution of the p1 ordering at a glance.
 # =====================================================================
 
-def _variant_colors():
-    return plt.cm.viridis(np.linspace(0, 0.9, len(VARIANT_SUFFIXES)))
+def _variant_colors(scan='p1'):
+    return plt.cm.viridis(np.linspace(0, 0.9, len(members(scan))))
 
 
 def _grid_axes(n, ncols=3, panel=(4.4, 3.5)):
     """Return (fig, flat_axes_list) with unused trailing axes hidden."""
-    ncols = min(ncols, n)
+    # A small grid three-across buys nothing: it still leaves an orphan at n=4
+    # and n=5, and the panels come out narrower. On the page the width is what
+    # sets how readable a panel is, since the figure is scaled to the text width.
+    ncols = 2 if n <= 6 else min(ncols, n)
     nrows = int(np.ceil(n / ncols))
     fig, axes = plt.subplots(nrows, ncols,
                              figsize=(panel[0] * ncols, panel[1] * nrows),
@@ -620,12 +599,16 @@ def _cddf_poisson_err(cddf):
     return None
 
 
+CDDF_XLIM = (13.0, 16.0)   # data starts at log N = 13.11; 12 wastes a third of the panel
+
+
 def _grid_cddf(frames, snaps, out_path):
     scan, plab = _frames_scan(frames)
-    colors = _variant_colors()
+    colors = _variant_colors(scan)
     fig, flat = _grid_axes(len(snaps))
     for ax, snap in zip(flat, snaps):
         rows = frames[snap]
+        shown = []          # f values inside CDDF_XLIM, for the y-limits below
         for r, c in zip(rows, colors):
             cddf = r['cddf']
             if cddf is None or not np.isfinite(r['param_value']):
@@ -633,18 +616,30 @@ def _grid_cddf(frames, snaps, out_path):
             m = cddf['f_N_HI'] > 0
             ax.plot(cddf['log10_N_HI'][m], cddf['f_N_HI'][m], '-',
                     color=c, lw=1.5, label=f"{r['param_value']:.1f}")
-            # The high-N bins hold single-digit counts in a 25 Mpc/h box.
+            vis = m & cddf['log10_N_HI'].between(*CDDF_XLIM)
+            shown.append(cddf['f_N_HI'][vis].values)
+            # The high-N bins hold single-digit counts in a 25 Mpc/h box, so
+            # f - err goes to zero there. Floor the band at a fixed fraction of
+            # f: clipping to an absolute 1e-300 instead puts that value into the
+            # axis data limits and autoscales the whole panel down 300 decades.
             err = _cddf_poisson_err(cddf)
             if err is not None:
                 ax.fill_between(cddf['log10_N_HI'][m],
-                                np.clip(cddf['f_N_HI'][m] - err[m], 1e-300, None),
+                                np.clip(cddf['f_N_HI'][m] - err[m],
+                                        cddf['f_N_HI'][m] * 1e-2, None),
                                 cddf['f_N_HI'][m] + err[m],
                                 color=c, alpha=0.18, lw=0)
         ax.set_yscale('log')
         ax.set_title(_panel_title(rows, snap))
         ax.set_xlabel(r'$\log_{10}\, N_{\rm HI}$')
         ax.set_ylabel(r'$f(N_{\rm HI})$ [Mpc$^{-1}$]')
-        ax.set_xlim(12, 16)
+        ax.set_xlim(*CDDF_XLIM)
+        # f spans ~14 decades out to log N = 21.5 while only 12--16 is drawn,
+        # and matplotlib autoscales over all data, not the x-window. Set the
+        # limits from the visible bins alone.
+        vals = np.concatenate(shown) if shown else np.array([])
+        if vals.size:
+            ax.set_ylim(0.1 * vals.min(), 10.0 * vals.max())
         ax.grid(alpha=0.3, which='both')
     flat[0].legend(title=plab, fontsize=7, loc='best')
     fig.suptitle(f'CDDF vs redshift ({scan} {plab} scan)')
@@ -654,7 +649,7 @@ def _grid_cddf(frames, snaps, out_path):
 
 def _grid_power(frames, snaps, out_path):
     scan, plab = _frames_scan(frames)
-    colors = _variant_colors()
+    colors = _variant_colors(scan)
     fig, flat = _grid_axes(len(snaps))
     for ax, snap in zip(flat, snaps):
         rows = frames[snap]
@@ -716,46 +711,6 @@ def _grid_scalar(frames, snaps, out_path, key, ylabel, title,
     _save(fig, out_path)
 
 
-def _grid_bparam(frames, snaps, out_path):
-    """One panel per snap: median b + 25-75% band vs the scanned parameter.
-    Panels with no line_widths data are left blank."""
-    scan, plab = _frames_scan(frames)
-    have = [s for s in snaps
-            if any(frames[s][i]['line_widths'] is not None
-                   for i in range(len(frames[s])))]
-    if not have:
-        print('  [grid] no line_widths anywhere — skipping b-param grid')
-        return
-    fig, flat = _grid_axes(len(have))
-    for ax, snap in zip(flat, have):
-        rows = frames[snap]
-        x, med, p25, p75 = [], [], [], []
-        for r in rows:
-            lw = r['line_widths']
-            x.append(r['param_value'])
-            if lw is None:
-                med.append(np.nan); p25.append(np.nan); p75.append(np.nan)
-                continue
-            b = lw['b_param_km_s'].values
-            b = b[np.isfinite(b) & (b > 0)]
-            if b.size == 0:
-                med.append(np.nan); p25.append(np.nan); p75.append(np.nan)
-                continue
-            med.append(np.median(b))
-            p25.append(np.percentile(b, 25))
-            p75.append(np.percentile(b, 75))
-        x = np.array(x, float)
-        ax.plot(x, med, 'o-', color='C0', lw=1.8, ms=6, label='median')
-        ax.fill_between(x, p25, p75, alpha=0.25)
-        ax.set_title(_panel_title(rows, snap))
-        ax.set_xlabel(plab)
-        ax.set_ylabel('b [km/s]')
-        ax.grid(alpha=0.3)
-    fig.suptitle(f'Doppler b-parameter vs redshift ({scan} {plab} scan)')
-    fig.tight_layout()
-    _save(fig, out_path)
-
-
 def _overlay_tau_eff(frames, snaps, out_path):
     """Single panel: tau_eff vs the scanned parameter, one line per snap."""
     _, plab = _frames_scan(frames)
@@ -792,7 +747,7 @@ def _delta_tau_eff_vs_z(frames, snaps, out_path):
     tau_eff by E(z). tau_eff per unit velocity carries a 1/H(z) factor, so a
     difference that vanishes in the bottom row is geometry, not gas.
     """
-    _, label = _frames_scan(frames)
+    scan, label = _frames_scan(frames)
     entries = []
     for snap in snaps:
         rows = frames[snap]
@@ -873,8 +828,8 @@ def _delta_tau_eff_vs_z(frames, snaps, out_path):
 
     # Per-variant differences against the fiducial, so the ordering is visible
     # and not just the two extremes.
-    colors = plt.cm.coolwarm(np.linspace(0, 1, len(VARIANT_SUFFIXES)))
-    for suf, c in zip(VARIANT_SUFFIXES, colors):
+    colors = plt.cm.coolwarm(np.linspace(0, 1, len(members(scan))))
+    for suf, c in zip(members(scan), colors):
         if suf == FIDUCIAL:
             continue
         zv, dv, pv = [], [], np.nan
@@ -941,7 +896,6 @@ def make_snapshot_grids(analysis_root, cosmo_table, snaps, out_dir, scan='p1'):
                  key='beta_fit', ylabel=r'$\beta$ (CDDF slope)',
                  title=f'CDDF power-law slope vs redshift ({scan} {plab} scan)',
                  err_key='beta_fit_err')
-    _grid_bparam(frames, snaps_sorted, grid_dir / 'grid_bparam.png')
     _overlay_tau_eff(frames, snaps_sorted, grid_dir / f'tau_eff_vs_{scan}_overlay.png')
     delta = _delta_tau_eff_vs_z(frames, snaps_sorted,
                                 grid_dir / 'delta_tau_eff_vs_z.png')
@@ -981,16 +935,11 @@ def run_one_snap(analysis_root, cosmo_table, snap, out_dir, scan='p1'):
                                if np.isfinite(r['redshift']) and np.isfinite(r['omega0']) else np.nan,
         })
 
-    plot_t1_1_thermal_trend(rows, snap_out / 'T1_1_T0_gamma_vs_param.png', snap)
-    plot_t1_2_pathlength   (rows, snap_out / 'T1_2_CDDF_pathlength_control.png', snap)
-    fgpa = plot_t1_3_fgpa  (rows, snap_out / 'T1_3_FGPA_vs_measured.png', snap)
-    ps   = plot_t1_4_power_spectrum_scale_split(rows, snap_out / 'T1_4_power_spectrum_scale_split.png', snap)
-    if snap == 'snap-080':
-        bp = plot_t1_6_bparam(rows, snap_out / 'T1_6_bparam.png', snap)
-        summary['T1_6_bparam'] = bp
+    plot_thermal_trend      (rows, snap_out / 'thermal_trend_vs_param.png', snap)
+    plot_cddf_pathlength    (rows, snap_out / 'cddf_pathlength_control.png', snap)
+    fgpa = plot_fgpa_residual(rows, snap_out / 'fgpa_vs_measured.png', snap)
 
-    summary['T1_3_fgpa'] = fgpa
-    summary['T1_4_power'] = ps
+    summary['fgpa_residual'] = fgpa
     return summary, snap_out
 
 
@@ -1001,7 +950,7 @@ def main():
                          '(e.g. output/analysis/IllustrisTNG/1P)')
     ap.add_argument('--cosmo-csv', required=True, type=Path,
                     help='CosmoAstroSeed CSV (keyed by Name column)')
-    ap.add_argument('--snaps', default='snap-080,snap-014',
+    ap.add_argument('--snaps', default='snap-080,snap-044',
                     help='comma-separated snap dirs to process')
     ap.add_argument('--scans', default='p1,p2',
                     help='comma-separated scans to process (any of '
@@ -1010,7 +959,7 @@ def main():
     ap.add_argument('--out-dir', type=Path,
                     default=Path('plots/hypothesis_p1_test'))
     ap.add_argument('--skip-cross-param', action='store_true',
-                    help='skip the T1.5 p1..p5 cross-parameter figure')
+                    help='skip the cross-scan direction p1..p5 cross-parameter figure')
     ap.add_argument('--skip-grids', action='store_true',
                     help='skip the across-snapshot comparison grids')
     args = ap.parse_args()
@@ -1034,17 +983,21 @@ def main():
             with open(snap_out / 'summary.json', 'w') as fh:
                 json.dump(s, fh, indent=2, default=float)
 
-    # T1.5 already overlays every scan in one figure, so it is per-snap, not
+    # cross-scan direction already overlays every scan in one figure, so it is per-snap, not
     # per-scan. Keep it at the top level rather than duplicating it under each.
     if not args.skip_cross_param:
         for snap in snaps:
             snap_out = args.out_dir / 'cross_parameter' / snap
-            snap_out.mkdir(parents=True, exist_ok=True)
-            xp = plot_t1_5_cross_parameter(
+            # Ask first, then make the directory -- a skipped test should leave
+            # no trace at all, not an empty dir that reads as a failed run.
+            xp = plot_cross_scan_direction(
                 args.analysis_root, cosmo, snap,
-                snap_out / 'T1_5_cross_parameter_direction.png')
+                snap_out / 'cross_scan_direction.png', scans=scans,
+                out_dir_maker=lambda: snap_out.mkdir(parents=True, exist_ok=True))
+            if not xp:
+                continue
             with open(snap_out / 'summary.json', 'w') as fh:
-                json.dump({'snap': snap, 'T1_5_cross_parameter': xp}, fh,
+                json.dump({'snap': snap, 'cross_scan_direction': xp}, fh,
                           indent=2, default=float)
 
     if not args.skip_grids:
